@@ -1,10 +1,6 @@
 package profile
 
-import (
-	"fmt"
-
-	"gopkg.in/yaml.v3"
-)
+import "gopkg.in/yaml.v3"
 
 // Layers orders profiles for upload: active first, then the next two in list
 // order (wrapping, skipping active). Returns at most 3.
@@ -56,18 +52,5 @@ func (q quoted) MarshalYAML() (any, error) {
 // MappingYAML renders 1-3 profiles as a ch57x-keyboard-tool mapping document
 // (orientation normal, rows 1, columns 3, knobs 1).
 func MappingYAML(layers []Profile) ([]byte, error) {
-	if len(layers) < 1 || len(layers) > 3 {
-		return nil, fmt.Errorf("mapping needs 1-3 layers, got %d", len(layers))
-	}
-	doc := mappingDoc{Orientation: "normal", Rows: 1, Columns: 3, Knobs: 1}
-	for _, p := range layers {
-		if err := Validate(p); err != nil {
-			return nil, fmt.Errorf("profile %s: %w", p.Name, err)
-		}
-		doc.Layers = append(doc.Layers, mappingLayer{
-			Buttons: [][]quoted{{quoted(p.Keys[0]), quoted(p.Keys[1]), quoted(p.Keys[2])}},
-			Knobs:   []mappingKnob{{CCW: quoted(p.Knob.CCW), Press: quoted(p.Knob.Press), CW: quoted(p.Knob.CW)}},
-		})
-	}
-	return yaml.Marshal(doc)
+	return MappingYAMLOriented(layers, OrientNormal)
 }
