@@ -36,6 +36,13 @@ func TestMigrate(t *testing.T) {
 			return !s.LED.FollowAgents && s.LED.Basic.Attention == LED{Mode: 2} && s.Pad.ActiveProfile == "media" &&
 				s.UI.Theme == ThemeDark && s.LED.PerLayer.Attention == LED{Effect: "backlight", Color: "white"}
 		}, ""},
+		{"mode, notifications, gestures", map[string]string{
+			"mode": "gesture", "notify.attention": "false",
+			"gesture.holdMs": "2000", "gesture.longholdMs": "3000", "gesture.doubletapMs": "0",
+		}, func(s Settings) bool {
+			return s.Pad.Mode == ModeGesture && !s.Notifications.Attention &&
+				s.Gestures.HoldMs == 2000 && s.Gestures.LongHoldMs == 3000 && s.Gestures.DoubleTapMs == 300
+		}, ""},
 		{"invalid values skipped", map[string]string{
 			"orientation": "sideways", "led.follow": "maybe", "ledLabel.2": "Wave",
 			"led.policy.8890": `{"attention":{"Mode":42}}`, "unknown.key": "x",
