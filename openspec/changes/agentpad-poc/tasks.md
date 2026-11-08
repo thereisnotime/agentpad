@@ -16,13 +16,13 @@
 
 ## 3. Agent events (`internal/events`, `internal/hook`, `internal/setup`)
 
-- [ ] 3.1 Event model and normalisers for Claude Code, Codex, OpenCode
-- [ ] 3.2 Session tracker and aggregate state
-- [ ] 3.3 JSONL event log in XDG state dir
-- [ ] 3.4 Loopback HTTP receiver with subscriber fan-out
-- [ ] 3.5 `agentpad hook <agent>` (stdin/argv, 300 ms timeout, exit 0)
-- [ ] 3.6 Hook snippets for Claude Code, Codex, OpenCode plugin, udev rule
-- [ ] 3.7 Unit tests
+- [x] 3.1 Event model and normalisers for Claude Code, Codex, OpenCode
+- [x] 3.2 Session tracker and aggregate state
+- [x] 3.3 JSONL event log in XDG state dir
+- [x] 3.4 Loopback HTTP receiver with subscriber fan-out
+- [x] 3.5 `agentpad hook <agent>` (stdin/argv, 300 ms timeout, exit 0)
+- [x] 3.6 Hook snippets for Claude Code, Codex, OpenCode plugin, udev rule
+- [x] 3.7 Unit tests
 
 ## 4. Desktop UI (`internal/ui`, `cmd/agentpad`)
 

@@ -10,8 +10,14 @@ no per-key colour.
 Agents expose state through hooks:
 - Claude Code: command hooks in `settings.json` receive JSON on stdin
   (`hook_event_name`, `session_id`, `cwd`, `tool_name`, `notification_type`, ...).
-- Codex CLI: `notify` program receives a JSON payload as its last argv on turn completion.
-- OpenCode: JS plugins subscribe to bus events (`permission.updated`, `session.idle`, ...).
+  `PermissionRequest` exists and fires when a tool needs a decision; Notification
+  `notification_type` includes `permission_prompt` and `idle_prompt`.
+- Codex CLI: `notify` program receives a JSON payload as its last argv; the only
+  documented `type` is `agent-turn-complete` (`thread-id`, `turn-id`, `cwd`,
+  `last-assistant-message`). Codex also has `hooks.json` lifecycle hooks now (future work).
+- OpenCode: JS plugins (`~/.config/opencode/plugins/`) get bus events via the `event`
+  hook (`session.status` `{type: busy|idle}`, `session.idle`, `permission.asked`/
+  `permission.replied`; older versions emit `permission.updated`).
 
 ## Goals / Non-Goals
 
