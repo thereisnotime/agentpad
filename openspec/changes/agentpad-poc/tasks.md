@@ -35,6 +35,6 @@
 
 ## 5. Verify
 
-- [ ] 5.1 `just lint test build` green
+- [x] 5.1 `just lint test build` green
 - [ ] 5.2 Manual: hook events from a real Claude Code session show in the UI
 - [ ] 5.3 Manual: apply profile + LED on a real pad (FENRIR or Surface with adapter)

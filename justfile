@@ -7,6 +7,8 @@ bin := "bin/agentpad"
 pkg := "./cmd/agentpad"
 version := `git describe --tags --always --dirty 2>/dev/null || echo dev`
 ldflags := "-s -w -X main.version=" + version
+# Fyne backend: native Wayland when X11 dev headers are missing (override with TAGS=...)
+tags := env("TAGS", `pkg-config --exists xcursor xrandr xinerama xi xxf86vm 2>/dev/null && echo "" || echo wayland`)
 
 # colors
 c_reset := '\033[0m'
@@ -36,8 +38,8 @@ info:
 build:
     @printf "{{ c_blue }}▸ build{{ c_reset }} {{ bin }}\n"
     @mkdir -p bin
-    go build -trimpath -ldflags "{{ ldflags }}" -o {{ bin }} {{ pkg }}
-    @printf "{{ c_green }}✔ built{{ c_reset }} {{ bin }} ({{ version }})\n"
+    go build -trimpath -tags "{{ tags }}" -ldflags "{{ ldflags }}" -o {{ bin }} {{ pkg }}
+    @printf "{{ c_green }}✔ built{{ c_reset }} {{ bin }} ({{ version }}{{ if tags != "" { ", " + tags } else { "" } }})\n"
 
 # Build and launch the desktop app
 [group('build')]
@@ -60,7 +62,7 @@ clean:
 [group('test')]
 test *args:
     @printf "{{ c_blue }}▸ test{{ c_reset }}\n"
-    go test -race -count=1 {{ args }} ./...
+    go test -race -count=1 -tags "{{ tags }}" {{ args }} ./...
 
 # Run tests with coverage report
 [group('test')]
@@ -79,7 +81,7 @@ fmt:
 lint:
     @printf "{{ c_blue }}▸ lint{{ c_reset }}\n"
     @test -z "$(gofmt -s -l .)" || { printf "{{ c_red }}✘ gofmt needed:{{ c_reset }}\n"; gofmt -s -l .; exit 1; }
-    @if command -v golangci-lint >/dev/null && golangci-lint version >/dev/null 2>&1; then golangci-lint run ./...; else printf "{{ c_yellow }}! golangci-lint missing, using go vet{{ c_reset }}\n"; go vet ./...; fi
+    @if command -v golangci-lint >/dev/null && golangci-lint version >/dev/null 2>&1; then golangci-lint run --build-tags "{{ tags }}" ./...; else printf "{{ c_yellow }}! golangci-lint missing, using go vet{{ c_reset }}\n"; go vet -tags "{{ tags }}" ./...; fi
     @printf "{{ c_green }}✔ lint ok{{ c_reset }}\n"
 
 # Tidy go.mod / go.sum
@@ -121,7 +123,7 @@ detect:
 # Send a fake Claude Code event to the running app
 [group('dev')]
 fake-event kind="permission_prompt":
-    @printf '{"hook_event_name":"Notification","notification_type":"{{ kind }}","session_id":"dev-1","cwd":"%s","message":"Claude needs your permission to use Bash"}' "$PWD" | go run {{ pkg }} hook claude
+    @printf '{"hook_event_name":"Notification","notification_type":"{{ kind }}","session_id":"dev-1","cwd":"%s","message":"Claude needs your permission to use Bash"}' "$PWD" | go run -tags "{{ tags }}" {{ pkg }} hook claude
     @printf "{{ c_green }}✔ sent{{ c_reset }} {{ kind }}\n"
 
 # Tail the event log

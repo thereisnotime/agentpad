@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/thereisnotime/agentpad/actions/workflows/ci.yml"><img src="https://github.com/thereisnotime/agentpad/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <img src="https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white" alt="Go 1.26"/>
+  <img src="https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white" alt="Go 1.27"/>
   <img src="https://img.shields.io/badge/UI-Fyne-5c6bc0" alt="Fyne"/>
   <img src="https://img.shields.io/badge/platform-linux-informational" alt="Linux"/>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/>
@@ -50,18 +50,74 @@ It is a single Go binary with a Fyne UI. No browser, no Electron, no Node.
 
 ## How it works
 
+```mermaid
+flowchart LR
+    subgraph AGENTS["🤖 Coding agents"]
+        direction TB
+        CC["🟠 Claude Code"]
+        CX["⚫ Codex CLI"]
+        OC["🟢 OpenCode"]
+    end
+
+    HOOK["🪝 agentpad hook &lt;agent&gt;<br/><sub>300 ms timeout · always exit 0</sub>"]
+
+    subgraph APP["🖥️ agentpad desktop app"]
+        direction TB
+        RX["📡 Receiver<br/><sub>127.0.0.1:47321</sub>"]
+        TR["🧭 Session tracker"]
+        LOG[("📜 events.jsonl")]
+        UI["🪟 Window + tray"]
+        LED["🚦 LED policy"]
+        PROF["🎛️ Profiles + editor"]
+        RX --> TR --> UI
+        RX --> LOG
+        TR --> LED
+    end
+
+    PAD["⌨️ CH57x pad<br/><sub>[1] [2] [3] ◎</sub>"]
+
+    CC -- hook JSON --> HOOK
+    CX -- notify JSON --> HOOK
+    OC -- plugin event --> HOOK
+    HOOK -- POST --> RX
+    PROF -- "mapping (once)" --> PAD
+    LED -- LED mode --> PAD
+    PAD -. "keystrokes: 1 · 2 · Esc · ↑ ↓ ⏎" .-> AGENTS
+
+    classDef agent fill:#fff4e6,stroke:#f08c00,stroke-width:2px,color:#000
+    classDef hook fill:#e7f5ff,stroke:#1c7ed6,stroke-width:2px,color:#000
+    classDef app fill:#f3f0ff,stroke:#7048e8,stroke-width:2px,color:#000
+    classDef store fill:#fff9db,stroke:#f59f00,stroke-width:2px,color:#000
+    classDef pad fill:#ebfbee,stroke:#2f9e44,stroke-width:3px,color:#000
+    class CC,CX,OC agent
+    class HOOK hook
+    class RX,TR,UI,LED,PROF app
+    class LOG store
+    class PAD pad
+    style AGENTS fill:#fffaf3,stroke:#f08c00,stroke-dasharray:4 3
+    style APP fill:#faf8ff,stroke:#7048e8,stroke-dasharray:4 3
 ```
- ┌──────────────┐  hook JSON   ┌──────────────────┐  POST 127.0.0.1:47321  ┌───────────────────────────┐
- │ Claude Code  │─────────────▶│                  │───────────────────────▶│ agentpad (desktop app)    │
- │ Codex CLI    │─────────────▶│ agentpad hook …  │                        │  • session tracker        │
- │ OpenCode     │─────────────▶│                  │                        │  • event log (jsonl)      │
- └──────▲───────┘              └──────────────────┘                        │  • profiles + editor      │
-        │                                                                  │  • tray + LED policy      │
-        │ keystrokes (standard USB keyboard)                               └─────────────┬─────────────┘
- ┌──────┴───────┐                                                                        │ mapping / LED mode
- │  CH57x pad   │◀───────────────────────────────────────────────────────────────────────┘
- │ [1] [2] [3] ◎│                     (ch57x-keyboard-tool)
- └──────────────┘
+
+### Approval flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 🟠 Claude Code
+    participant H as 🪝 agentpad hook
+    participant P as 🖥️ agentpad
+    participant K as ⌨️ Pad
+
+    A->>H: PermissionRequest (Bash)
+    H->>P: POST /v1/events/claude
+    P->>P: session → attention
+    P->>K: LED mode 1 💡
+    Note over K: pad lights up
+    K->>A: key 1 → "1" (approve once)
+    A->>H: PostToolUse
+    H->>P: POST /v1/events/claude
+    P->>P: session → busy
+    P->>K: LED mode 0
 ```
 
 1. agentpad writes a key profile to the pad once. From then on the pad is a plain USB keyboard sending e.g. `1`, `2`, `Esc`.
@@ -95,7 +151,7 @@ just install           # agentpad -> ~/.local/bin
 
 ### Build dependencies
 
-Go 1.26 and [just](https://github.com/casey/just) (pinned in `.tool-versions`), plus the Fyne C dependencies:
+Go 1.27 and [just](https://github.com/casey/just) (pinned in `.tool-versions`), plus the Fyne C dependencies:
 
 ```bash
 # Fedora
