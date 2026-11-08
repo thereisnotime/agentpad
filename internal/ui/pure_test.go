@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -289,7 +290,7 @@ func TestControlActions(t *testing.T) {
 			t.Errorf("control %d needs a title and a slot", c)
 		}
 	}
-	if setAction(p, ctlKey1, "hold", "x") != p || getAction(p, ctlKey1, "hold") != "" {
+	if !reflect.DeepEqual(setAction(p, ctlKey1, "hold", "x"), p) || getAction(p, ctlKey1, "hold") != "" {
 		t.Error("unknown slots are ignored")
 	}
 }
