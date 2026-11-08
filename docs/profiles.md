@@ -39,4 +39,5 @@ The editor offers all supported names as suggestions.
 
 - Built-in profiles are compiled in.
 - Your edits are stored as YAML overrides in `~/.config/agentpad/profiles/<name>.yaml`; **Reset** deletes the override.
+  An edited built-in shows a small "edited" tag on its chip.
 - Orientation and LED settings are app preferences, not part of profiles.

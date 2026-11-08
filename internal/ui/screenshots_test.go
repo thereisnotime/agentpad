@@ -10,6 +10,8 @@ package ui
 // receiver is started.
 
 import (
+	"context"
+	"errors"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -21,9 +23,16 @@ import (
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/thereisnotime/agentpad/internal/events"
+	"github.com/thereisnotime/agentpad/internal/gesture"
+	"github.com/thereisnotime/agentpad/internal/jump"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
+
+type noJumper struct{}
+
+func (noJumper) Jump(context.Context, events.Session) jump.Report { return jump.Report{} }
+func (noJumper) Close() error                                     { return nil }
 
 type silentInput struct{ ch chan PadInputEvent }
 
@@ -44,6 +53,11 @@ func TestScreenshots(t *testing.T) {
 		LogPath: "/home/me/.local/state/agentpad/events.jsonl",
 		Addr:    "127.0.0.1:47321",
 		Input:   silentInput{make(chan PadInputEvent)},
+		Live:    LiveDevices{Disabled: true},
+		Jumper:  noJumper{},
+		Notifier: func(func(string)) (NotifyBackend, error) {
+			return nil, errors.New("no notifications in screenshots")
+		},
 	})
 	u.ledFollow.Store(false)
 	t.Cleanup(u.shutdown)
@@ -107,9 +121,30 @@ func TestScreenshots(t *testing.T) {
 		u.profiles.selectControl(ctlKey2)
 	})
 	u.profiles.rotate(profile.OrientNormal)
-	shot("pad-wide", screenPad, 1200, 980, nil)
-	shot("pad-narrow", screenPad, 500, 1400, nil)
+	shot("pad-wide", screenPad, 1200, 1180, nil)
+	shot("pad-narrow", screenPad, 500, 1700, nil)
 	shot("sessions-wide", screenSessions, 1200, 700, nil)
+	shot("sessions-jump", screenSessions, 500, 900, nil)
+
+	// gesture mode: inspector with gesture slots, monitor, mode card
+	gst := liveStatus{Mode: ModeGesture, Reading: true, Backend: "uinput"}
+	u.mode = ModeGesture
+	u.profiles.setMode(ModeGesture)
+	u.pad.showMode(ModeGesture, gst)
+	for i, ev := range []gesture.Event{
+		{Gesture: gesture.Gesture{Control: gesture.KnobCW, Kind: gesture.PressRotate}, Action: "shift-tab"},
+		{Gesture: gesture.Gesture{Control: gesture.Key1, Kind: gesture.Tap}, Action: "1"},
+		{Gesture: gesture.Gesture{Control: "key1+key3", Kind: gesture.Chord}},
+		{Gesture: gesture.Gesture{Control: gesture.Key3, Kind: gesture.Hold}, Action: "ctrl-c"},
+	} {
+		ev.Time = time.Now().Add(time.Duration(i-4) * time.Second)
+		u.profiles.monitorAdd(gestureLine(ev))
+	}
+	shot("profiles-gestures", screenProfiles, 1200, 1340, func() { u.profiles.selectControl(ctlKey3) })
+	shot("pad-gesture", screenPad, 1200, 1180, nil)
+	u.mode = ModePlain
+	u.profiles.setMode(ModePlain)
+	u.pad.showMode(ModePlain, liveStatus{Mode: ModePlain})
 	shot("log-wide", screenLog, 1200, 600, nil)
 	shot("setup-wide", screenSetup, 1200, 900, nil)
 	shot("about-wide", screenAbout, 1200, 820, nil)

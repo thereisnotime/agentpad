@@ -276,12 +276,13 @@ var (
 
 // ---- chip ------------------------------------------------------------------------
 
-// chip is a rounded, selectable label with an optional badge dot.
+// chip is a rounded, selectable label with an optional muted text tag
+// (e.g. "edited").
 type chip struct {
 	*tapBox
 	bg       *canvas.Rectangle
 	label    *canvas.Text
-	badge    *canvas.Circle
+	tag      *canvas.Text
 	selected bool
 	hovered  bool
 }
@@ -290,9 +291,9 @@ func newChip(label string, mono bool, onTap func()) *chip {
 	c := &chip{bg: roundRect(colSurface2, 15), label: text(label, 13, colText, false)}
 	c.label.TextStyle.Monospace = mono
 	c.bg.StrokeWidth = 1
-	c.badge = canvas.NewCircle(colorAttention)
-	c.badge.Hide()
-	row := container.NewHBox(vcenter(c.label), vcenter(fixed(7, 7, c.badge)))
+	c.tag = text("", 11, colText3, false)
+	c.tag.Hide()
+	row := container.NewHBox(vcenter(c.label), vcenter(c.tag))
 	c.tapBox = newTapBox(container.NewStack(c.bg, inset(5, 5, 12, 12, row)), onTap, func(h bool) {
 		c.hovered = h
 		c.restyle()
@@ -308,12 +309,15 @@ func (c *chip) setSelected(on bool) {
 	}
 }
 
-func (c *chip) setBadge(on bool) {
-	if on {
-		c.badge.Show()
+// setTag shows a small muted tag after the label ("" hides it).
+func (c *chip) setTag(s string) {
+	c.tag.Text = s
+	if s == "" {
+		c.tag.Hide()
 	} else {
-		c.badge.Hide()
+		c.tag.Show()
 	}
+	c.restyle()
 }
 
 func (c *chip) restyle() {
@@ -329,8 +333,13 @@ func (c *chip) restyle() {
 		c.label.Color = colText
 	}
 	c.label.TextStyle.Bold = c.selected
+	c.tag.Color = colText3
+	if c.selected {
+		c.tag.Color = withAlpha(rgb(0xffffff), 0xb0)
+	}
 	c.bg.Refresh()
 	c.label.Refresh()
+	c.tag.Refresh()
 }
 
 // chipRow wraps chips onto as many lines as needed.

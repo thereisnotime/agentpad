@@ -250,3 +250,20 @@ func capLabel(action string, n int) string {
 	}
 	return string(r[:n-1]) + "…"
 }
+
+// editedNote explains the "edited" tag on a built-in profile.
+const editedNote = "Edited · differs from the built-in, Reset restores it"
+
+// editedBuiltin reports whether a profile gets the "edited" tag: a built-in
+// with a stored override. Profiles only the user has get no tag.
+func editedBuiltin(name string, overridden bool) bool {
+	if !overridden {
+		return false
+	}
+	for _, b := range profile.Builtins() {
+		if b.Name == name {
+			return true
+		}
+	}
+	return false
+}

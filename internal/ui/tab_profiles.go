@@ -153,7 +153,9 @@ func (t *profilesTab) reload(keep string) {
 	for i, p := range list {
 		i := i
 		c := newChip(p.Name, false, func() { t.selectProfile(i) })
-		c.setBadge(t.u.deps.Store.IsOverridden(p.Name))
+		if editedBuiltin(p.Name, t.u.deps.Store.IsOverridden(p.Name)) {
+			c.setTag("edited")
+		}
 		t.chips.Add(c)
 		if p.Name == keep {
 			idx = i
@@ -202,11 +204,11 @@ func (t *profilesTab) loadInspector() {
 	t.loading = true
 	defer func() { t.loading = false }()
 	t.inspTitle.SetText(t.control.title())
-	modified := ""
-	if t.u.deps.Store.IsOverridden(t.draft.Name) {
-		modified = " · edited"
+	sub := "Layer 1 · " + t.draft.Name
+	if editedBuiltin(t.draft.Name, t.u.deps.Store.IsOverridden(t.draft.Name)) {
+		sub += "\n" + editedNote
 	}
-	t.inspSub.SetText("Layer 1 · " + t.draft.Name + modified)
+	t.inspSub.SetText(sub)
 	t.slotsBox.Objects = nil
 	clear(t.entries)
 	slots := slotsFor(t.control, t.draft, t.gestureMode)
@@ -344,6 +346,7 @@ func (t *profilesTab) refreshMonitor(now time.Time) {
 		txt.Color = withAlpha(c, monitorAlpha(i, now.Sub(items[i].At)))
 		txt.Refresh()
 	}
+	t.monitor.Refresh() // text sizes changed
 }
 
 func (t *profilesTab) rotate(o profile.Orientation) {

@@ -801,3 +801,20 @@ func TestEditFileOpensExisting(t *testing.T) {
 		t.Errorf("opened %q", opened)
 	}
 }
+
+func TestEditedTag(t *testing.T) {
+	if !editedBuiltin("codex", true) || editedBuiltin("codex", false) || editedBuiltin("my-own", true) {
+		t.Error("only overridden built-ins are tagged")
+	}
+	u := newTestUI(t)
+	p := u.profiles
+	p.entry().SetText("f13")
+	p.save()
+	ch := p.chips.Objects[p.selected].(*chip)
+	if !ch.tag.Visible() || ch.tag.Text != "edited" || !strings.Contains(p.inspSub.Text, editedNote) {
+		t.Errorf("tag %q visible=%v sub=%q", ch.tag.Text, ch.tag.Visible(), p.inspSub.Text)
+	}
+	if other := p.chips.Objects[(p.selected+1)%len(p.chips.Objects)].(*chip); other.tag.Visible() {
+		t.Error("untouched profiles have no tag")
+	}
+}
