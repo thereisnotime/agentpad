@@ -26,3 +26,23 @@
    like `agentpad:next-session` later).
 5. **Profiles**: a profile gains optional `gestures:` map control -> gesture -> action.
    Plain fields remain the plain-mode mapping.
+
+## Implementation notes
+
+- Packages: `internal/gesture` (recogniser, `Engine`, `Observer`, key maps),
+  `internal/evdev` (discovery, grab/observe reader), `internal/vkbd` (uinput,
+  ydotool). All cgo- and Fyne-free.
+- Gesture-mode mapping: F13..F18 written to all three layers so a layer switch
+  cannot break gesture mode; oriented like the plain mapping (keys as seen).
+- Knob press hold is decided on release (default), so hold-then-rotate emits
+  only press+rotate; `KnobEagerHold` restores firing at the threshold.
+- Delays depend on configured actions: tap waits for double-tap only with a
+  `doubletap` action; key hold waits for release only with a `longhold`
+  action; without hold actions a long press is a tap. Chords need a chord
+  action. Tap/rotate fall back to the plain key/knob action.
+- A detent while the knob press is still down also enters press+rotate.
+- Observe mode: the pad can be read without `EVIOCGRAB` for a live view in
+  plain mode; keycodes map back to controls via the active profile, with
+  collisions resolved to the first control (key1..knob-cw order) and reported.
+- In the recorded trace the 4th detent comes 792 ms after the 3rd, past the
+  500 ms idle end, so it counts as a plain rotate.

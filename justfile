@@ -93,17 +93,23 @@ tidy:
 [group('quality')]
 ci: lint test build
 
-# Show the udev rule needed to program the pad without root
+# Show the udev rules: program the pad, read its input nodes and use /dev/uinput (gesture mode) without root
 [group('device')]
 udev-rule:
+    @printf '# agentpad: program the pad (ch57x-keyboard-tool)\n'
     @printf 'SUBSYSTEM=="usb", ATTR{idVendor}=="1189", ATTR{idProduct}=="8890|8840|8842", TAG+="uaccess"\n'
+    @printf '# agentpad gesture mode: read and grab the pad input nodes\n'
+    @printf 'SUBSYSTEM=="input", ATTRS{idVendor}=="1189", ATTRS{idProduct}=="8890|8840|8842", TAG+="uaccess"\n'
+    @printf '# agentpad gesture mode: virtual keyboard\n'
+    @printf 'KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"\n'
 
-# Install the udev rule (needs sudo)
+# Install the udev rules (needs sudo)
 [group('device')]
 udev-install:
     just udev-rule | sudo tee /etc/udev/rules.d/50-agentpad.rules >/dev/null
     sudo udevadm control --reload && sudo udevadm trigger
-    @printf "{{ c_green }}✔ udev rule installed{{ c_reset }}, replug the pad\n"
+    sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
+    @printf "{{ c_green }}✔ udev rules installed{{ c_reset }}, replug the pad (log out and in if /dev/uinput stays root-only)\n"
 
 # Install ch57x-keyboard-tool (device backend) to ~/.local/bin
 [group('device')]
@@ -139,6 +145,22 @@ led-probe from="0" to="6" secs="4":
 fake-event kind="permission_prompt":
     @printf '{"hook_event_name":"Notification","notification_type":"{{ kind }}","session_id":"dev-1","cwd":"%s","message":"Claude needs your permission to use Bash"}' "$PWD" | go run -tags "{{ tags }}" {{ pkg }} hook claude
     @printf "{{ c_green }}✔ sent{{ c_reset }} {{ kind }}\n"
+
+# Record raw key events from the pad for a new gesture trace (libinput, Ctrl-C to stop)
+[group('dev')]
+gesture-trace:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v libinput >/dev/null || { printf "{{ c_red }}✘ libinput not found{{ c_reset }} (install libinput-utils)\n"; exit 1; }
+    mapfile -t nodes < <(awk '
+        /^I:/ { ok = ($0 ~ /Vendor=1189/ && $0 ~ /Product=(8890|8840|8842)/) }
+        /^H:/ && ok { for (i = 1; i <= NF; i++) if ($i ~ /^event[0-9]+$/) print "/dev/input/" $i }
+    ' /proc/bus/input/devices)
+    if [ ${#nodes[@]} -eq 0 ]; then printf "{{ c_yellow }}no CH57x pad input nodes found{{ c_reset }}\n"; exit 1; fi
+    args=(); for n in "${nodes[@]}"; do args+=(--device "$n"); done
+    sudo=""; [ -r "${nodes[0]}" ] || sudo="sudo"
+    printf "{{ c_blue }}▸ tracing{{ c_reset }} %s {{ c_dim }}(save the output under internal/gesture/testdata/){{ c_reset }}\n" "${nodes[*]}"
+    $sudo libinput debug-events --show-keycodes "${args[@]}"
 
 # Tail the event log
 [group('dev')]
