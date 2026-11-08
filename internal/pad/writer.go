@@ -63,9 +63,14 @@ func (w *ToolWriter) Upload(mapping []byte) error {
 	return w.exec(mapping, "upload")
 }
 
-// SetLED applies s. Stub: backend work adds CapsFor validation and 884x args.
+// SetLED validates s against CapsFor(w.ProductID) (0 means 8890) and applies it.
+// Invalid settings are rejected before the tool runs.
 func (w *ToolWriter) SetLED(s LEDSetting) error {
-	return w.exec(nil, "led", strconv.Itoa(s.Mode))
+	caps := CapsFor(w.ProductID)
+	if err := ValidateLED(caps, s); err != nil {
+		return err
+	}
+	return w.exec(nil, append([]string{"led"}, ledArgs(caps, s)...)...)
 }
 
 func (w *ToolWriter) exec(stdin []byte, args ...string) error {

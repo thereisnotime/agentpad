@@ -87,12 +87,22 @@ func TestToolWriterArgs(t *testing.T) {
 	w.ProductID = 0x8890
 	_ = w.SetLED(m(0))
 	w.ProductID = 0x8840
-	_ = w.SetLED(m(1))
+	if err := w.SetLED(LEDSetting{Layer: 1, Effect: "backlight", Color: "red"}); err != nil {
+		t.Fatal(err)
+	}
+	w.ProductID = 0x8842
+	_ = w.SetLED(LEDSetting{Layer: 2, Effect: "off"})
+	_ = w.SetLED(LEDSetting{Effect: "backlight", Color: "white"})
+	_ = w.SetLED(LEDSetting{Effect: "shock2", Color: "cyan"})
 	want := []call{
 		{[]string{"upload"}, "doc"},
 		{[]string{"led", "2"}, ""},
 		{[]string{"led", "0"}, ""},
-		{[]string{"--product-id", "34880", "led", "1"}, ""},
+		// 884x: effect and colour travel as one argument.
+		{[]string{"--product-id", "34880", "led", "1", "backlight red"}, ""},
+		{[]string{"--product-id", "34882", "led", "2", "off"}, ""},
+		{[]string{"--product-id", "34882", "led", "0", "backlight white"}, ""},
+		{[]string{"--product-id", "34882", "led", "0", "shock2 cyan"}, ""},
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %+v", calls)
@@ -346,4 +356,57 @@ func curMode(c *LEDController) int {
 		return -1
 	}
 	return s.Mode
+}
+
+type recLED struct {
+	mu  sync.Mutex
+	got []LEDSetting
+}
+
+func (r *recLED) Available() error      { return nil }
+func (r *recLED) Upload(_ []byte) error { return nil }
+func (r *recLED) SetLED(s LEDSetting) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.got = append(r.got, s)
+	return nil
+}
+
+// TestLEDSettingEquality: change detection compares the whole setting,
+// so a different layer, effect or colour is a change; the same one is not.
+func TestLEDSettingEquality(t *testing.T) {
+	r := &recLED{}
+	c, clk := newTestLED(r)
+	red := LEDSetting{Effect: "backlight", Color: "red"}
+	seq := []LEDSetting{
+		red,
+		red,                                  // same: skipped
+		{Effect: "backlight", Color: "blue"}, // colour change
+		{Layer: 1, Effect: "backlight", Color: "blue"}, // layer change
+		{Layer: 1, Effect: "press", Color: "blue"},     // effect change
+		{Layer: 1, Effect: "press", Color: "blue"},     // same: skipped
+	}
+	for _, s := range seq {
+		if err := c.Set(s); err != nil {
+			t.Fatal(err)
+		}
+		clk.Advance(5 * time.Second)
+	}
+	want := []LEDSetting{seq[0], seq[2], seq[3], seq[4]}
+	if !reflect.DeepEqual(r.got, want) {
+		t.Fatalf("writes = %+v", r.got)
+	}
+	if cur, ok := c.Current(); !ok || cur != seq[4] {
+		t.Fatalf("Current = %+v %v", cur, ok)
+	}
+
+	// Forget makes the next identical Set write again.
+	c.Forget()
+	if _, ok := c.Current(); ok {
+		t.Fatal("Current after Forget should be unset")
+	}
+	_ = c.Set(seq[4])
+	if len(r.got) != 5 {
+		t.Fatalf("Set after Forget did not write: %+v", r.got)
+	}
 }
