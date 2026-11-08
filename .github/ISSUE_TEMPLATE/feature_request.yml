@@ -1,0 +1,33 @@
+name: ✨ Feature request
+description: Suggest an idea or improvement
+title: "[feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+      description: How should it work? Mockups and examples welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Pad / LEDs
+        - Profiles / gestures
+        - Agent integration
+        - UI
+        - Other
+  - type: input
+    id: pad
+    attributes:
+      label: Pad model (if relevant)
+      placeholder: "1189:8890 (3 keys + 1 knob)"

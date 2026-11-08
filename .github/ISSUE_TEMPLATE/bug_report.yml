@@ -1,0 +1,91 @@
+name: 🐞 Bug report
+description: Something in agentpad doesn't work as expected
+title: "[bug] "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The **Report a bug** button in agentpad's About screen fills in version, OS and pad for you.
+        Pad not detected at all on a USB-C laptop? Check the [USB-C note](https://github.com/thereisnotime/agentpad#hardware) first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. Open Profiles, select claude-code
+        2. Click "Apply to pad"
+        3. Error: ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Pad detection / programming
+        - LEDs
+        - Profiles / orientation
+        - Agent events (Claude Code / Codex / OpenCode)
+        - Gestures
+        - UI / tray
+        - Install / build
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent involved
+      multiple: true
+      options:
+        - None
+        - Claude Code
+        - Codex CLI
+        - OpenCode
+  - type: input
+    id: version
+    attributes:
+      label: agentpad version
+      description: "`agentpad version`"
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / session
+      placeholder: "linux/amd64 · 6.19.8 · wayland"
+    validations:
+      required: true
+  - type: input
+    id: pad
+    attributes:
+      label: Pad USB ID
+      description: "`lsusb -d 1189:`"
+      placeholder: "1189:8890"
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How is the pad connected?
+      options:
+        - USB-A port
+        - USB-C → USB-A adapter + A→C cable
+        - USB-C → USB-C cable
+        - Hub / dock
+        - Not connected
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `~/.local/state/agentpad/events.jsonl` or terminal output. Remove anything private.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: The udev rule is installed (`just udev-install`)

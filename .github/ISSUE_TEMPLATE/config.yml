@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 README / setup guide
+    url: https://github.com/thereisnotime/agentpad#readme
+    about: Install steps, USB-C power quirk, agent hook snippets.

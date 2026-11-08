@@ -33,6 +33,7 @@ It is a single Go binary with a Fyne UI. No browser, no Electron, no Node.
 - [Default profiles](#default-profiles)
 - [Development](#development)
 - [Prior art](#prior-art)
+- [Contributing & bugs](#contributing--bugs)
 - [License](#license)
 
 ## Features
@@ -278,6 +279,12 @@ agentpad combines ideas from these projects:
 - [etalli/Gavel](https://github.com/etalli/Gavel): Claude Code permission buttons, hook-driven LEDs and a decision log
 - [cha978rlie/CodexPad](https://github.com/cha978rlie/CodexPad): 3-key pad companion for Codex, LED as unread indicator
 - [puritysb/AgentDeck](https://github.com/puritysb/AgentDeck): multi-agent dashboards and physical controls
+
+## Contributing & bugs
+
+Found a bug? Use **About → Report a bug** in the app (it pre-fills version, OS and pad), or open a
+[bug report](https://github.com/thereisnotime/agentpad/issues/new?template=bug_report.yml).
+Ideas go to [feature requests](https://github.com/thereisnotime/agentpad/issues/new?template=feature_request.yml).
 
 ## License
 
