@@ -109,7 +109,7 @@ led:
 		x.Pad.Orientation = profile.OrientClockwise
 		x.LED.SetLabel(1, "")
 		x.LED.SetLabel(2, "Breathing")
-		x.LED.Basic.Attention = LED{Mode: 4}
+		x.LED.Basic.Attention = LED{Mode: 1}
 		x.UI.Theme = ThemeDark
 	})
 	if err != nil {
@@ -118,7 +118,7 @@ led:
 	text := readT(t, path)
 	for _, want := range []string{
 		"# my settings, hands off", "orientation: clockwise # desk at home", "# which profile",
-		"experimental: {foo: 1}", "sparkle: true", `"3": Rainbow # the nice one`, "attention: {mode: 4}",
+		"experimental: {foo: 1}", "sparkle: true", `"3": Rainbow # the nice one`, "attention: {mode: 1}",
 		"theme: dark", "Breathing",
 	} {
 		if !strings.Contains(text, want) {
@@ -165,7 +165,7 @@ func TestUpdateRejectsInvalid(t *testing.T) {
 	if !errors.As(err, &ve) || ve.Errors[0].Path != "led.8890.attention" {
 		t.Fatalf("err = %v", err)
 	}
-	if readT(t, s.Path()) != before || s.Get().LED.Basic.Attention.Mode != 1 {
+	if readT(t, s.Path()) != before || s.Get().LED.Basic.Attention.Mode != 2 {
 		t.Fatal("invalid update was written")
 	}
 }

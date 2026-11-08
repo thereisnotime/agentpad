@@ -42,8 +42,12 @@ const (
 	pid8842 uint16 = 0x8842
 )
 
-// modes8890 is how many firmware effect indexes are offered for 8890 (0..5).
-const modes8890 = 6
+// labels8890 are the only effects the 8890 firmware has. Confirmed by the
+// vendor's Windows tool (ported in fleximus/macro_keyboard: "mode 0, 1 or 2"),
+// CodexPad and agentpad's LED lab: indexes above 2 fall back to a default
+// glow, and bytes after the mode (colour/speed candidates) are ignored. The
+// hue of "Key glow" differs per unit (red, purple, ...).
+var labels8890 = []string{"Off", "Key glow", "Rainbow chase"}
 
 // layers884x is the number of LED layers on 884x boards (tool: "Layer must be 0-2").
 const layers884x = 3
@@ -51,7 +55,7 @@ const layers884x = 3
 var colors884x = []string{"red", "orange", "yellow", "green", "cyan", "blue", "purple"}
 
 const (
-	note8890 = "This board's firmware only offers built-in effects; colours can't be chosen."
+	note8890 = "This board's firmware has exactly three lighting modes. Colour, brightness and speed can't be changed (confirmed against the vendor tool)."
 	// ch57x-keyboard-tool v1.7.0 packs the 884x LED code at the wrong byte
 	// (upstream issue #180, fixed on master after v1.7.0).
 	note884x = "Effects and colours are set per layer. ch57x-keyboard-tool v1.7.0 has a known " +
@@ -77,12 +81,8 @@ func CapsFor(productID uint16) LEDCaps {
 			Note:            note884x,
 		}
 	}
-	modes := make([]LEDMode, modes8890)
-	for i := range modes {
-		label := "Off"
-		if i > 0 {
-			label = fmt.Sprintf("Effect %d", i)
-		}
+	modes := make([]LEDMode, len(labels8890))
+	for i, label := range labels8890 {
 		modes[i] = LEDMode{Index: i, ID: fmt.Sprintf("mode-%d", i), Label: label}
 	}
 	if productID != pid8890 {

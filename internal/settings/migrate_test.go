@@ -19,13 +19,13 @@ func TestMigrate(t *testing.T) {
 			"orientation":       "counterclockwise",
 			"led.follow":        "false",
 			"profile.active":    "codex",
-			"led.policy.8890":   `{"attention":{"Layer":0,"Mode":3,"Effect":"","Color":""},"otherwise":{"Mode":0}}`,
+			"led.policy.8890":   `{"attention":{"Layer":0,"Mode":1,"Effect":"","Color":""},"otherwise":{"Mode":0}}`,
 			"led.policy.884x":   `{"attention":{"Layer":1,"Effect":"shock","Color":"cyan"},"otherwise":{"Effect":"off"}}`,
 			"ledLabel.3":        "Rainbow",
 			"led.attentionMode": "5", // ignored: a 8890 policy is present
 		}, func(s Settings) bool {
 			return s.Pad.Orientation == profile.OrientCounterClockwise && !s.LED.FollowAgents &&
-				s.Pad.ActiveProfile == "codex" && s.LED.Basic.Attention == LED{Mode: 3} &&
+				s.Pad.ActiveProfile == "codex" && s.LED.Basic.Attention == LED{Mode: 1} &&
 				s.LED.PerLayer.Attention == LED{Layer: 1, Effect: "shock", Color: "cyan"} &&
 				s.LED.PerLayer.Normal == LED{Effect: "off"} && s.LED.Label(3) == "Rainbow"
 		}, ""},

@@ -192,7 +192,7 @@ func Defaults() Settings {
 		},
 		LED: LEDSettings{
 			FollowAgents: true,
-			Basic:        LEDPolicy{Attention: LED{Mode: 1}, Normal: LED{Mode: 0}},
+			Basic:        LEDPolicy{Attention: LED{Mode: 2}, Normal: LED{Mode: 0}}, // rainbow chase / off
 			PerLayer:     LEDPolicy{Attention: LED{Effect: "backlight", Color: "orange"}, Normal: LED{Effect: "off"}},
 			Labels:       map[string]string{},
 		},

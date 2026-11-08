@@ -49,7 +49,7 @@ func TestFileSettingsRoundTrip(t *testing.T) {
 	fs, _ := newFileSettings(t)
 	fs.SetOrientation(profile.OrientClockwise)
 	fs.SetLEDFollow(false)
-	p8890 := LEDPolicy{Attention: pad.LEDSetting{Mode: 4}, Otherwise: pad.LEDSetting{Mode: 2}}
+	p8890 := LEDPolicy{Attention: pad.LEDSetting{Mode: 1}, Otherwise: pad.LEDSetting{Mode: 2}}
 	p884x := LEDPolicy{Attention: pad.LEDSetting{Layer: 1, Effect: "shock", Color: "cyan"}, Otherwise: pad.LEDSetting{Effect: "off"}}
 	fs.SetLEDPolicy(0x8890, p8890)
 	fs.SetLEDPolicy(0x8842, p884x)
@@ -186,7 +186,7 @@ func TestLegacyPrefsMigration(t *testing.T) {
 	p.SetString(prefMode, "gesture")
 	p.SetBool(prefLEDFollow, false)
 	p.SetBool(prefNotify, false)
-	p.SetString(ledPolicyKey(0x8890), encodeLEDPolicy(LEDPolicy{Attention: pad.LEDSetting{Mode: 3}}))
+	p.SetString(ledPolicyKey(0x8890), encodeLEDPolicy(LEDPolicy{Attention: pad.LEDSetting{Mode: 1}}))
 	p.SetString(ledPolicyKey(0x8842), encodeLEDPolicy(LEDPolicy{
 		Attention: pad.LEDSetting{Effect: "shock", Color: "red"}, Otherwise: pad.LEDSetting{Effect: "off"},
 	}))
@@ -211,7 +211,7 @@ func TestLegacyPrefsMigration(t *testing.T) {
 	}
 	s := st.Get()
 	if s.Pad.Orientation != profile.OrientNormal || s.Pad.ActiveProfile != "claude-code" || s.Pad.Mode != settings.ModeGesture ||
-		s.LED.FollowAgents || s.Notifications.Attention || s.LED.Basic.Attention.Mode != 3 ||
+		s.LED.FollowAgents || s.Notifications.Attention || s.LED.Basic.Attention.Mode != 1 ||
 		s.LED.PerLayer.Attention != (settings.LED{Effect: "shock", Color: "red"}) || s.LED.Label(2) != "Breathing" ||
 		s.Gestures.HoldMs != 600 || s.Gestures.LongHoldMs != 1500 {
 		t.Fatalf("migrated = %+v", s)

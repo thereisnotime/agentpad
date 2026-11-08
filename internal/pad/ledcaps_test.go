@@ -13,7 +13,7 @@ func TestCapsFor(t *testing.T) {
 		if c.ProductID != 0x8890 || c.PerLayer || len(c.Colors) != 0 || len(c.BacklightColors) != 0 || c.Note == "" {
 			t.Fatalf("%#x: %+v", pid, c)
 		}
-		if len(c.Modes) != 6 {
+		if len(c.Modes) != 3 {
 			t.Fatalf("%#x: %d modes", pid, len(c.Modes))
 		}
 		for i, m := range c.Modes {
@@ -21,7 +21,7 @@ func TestCapsFor(t *testing.T) {
 				t.Fatalf("%#x mode %d: %+v", pid, i, m)
 			}
 		}
-		if c.Modes[0].Label != "Off" || c.Modes[1].Label != "Effect 1" || c.Modes[1].ID != "mode-1" {
+		if c.Modes[0].Label != "Off" || c.Modes[1].Label != "Key glow" || c.Modes[2].Label != "Rainbow chase" || c.Modes[1].ID != "mode-1" {
 			t.Fatalf("labels: %+v", c.Modes)
 		}
 	}
@@ -63,8 +63,8 @@ func TestValidateLED(t *testing.T) {
 		wantErr string // "" means valid
 	}{
 		{"8890 off", c8890, LEDSetting{}, ""},
-		{"8890 mode 5", c8890, LEDSetting{Mode: 5}, ""},
-		{"8890 mode 6", c8890, LEDSetting{Mode: 6}, "out of range"},
+		{"8890 mode 2", c8890, LEDSetting{Mode: 2}, ""},
+		{"8890 mode 3", c8890, LEDSetting{Mode: 3}, "out of range"},
 		{"8890 negative", c8890, LEDSetting{Mode: -1}, "out of range"},
 		{"8890 colour", c8890, LEDSetting{Mode: 1, Color: "red"}, "no colour"},
 		{"8890 effect", c8890, LEDSetting{Effect: "backlight"}, "by index"},

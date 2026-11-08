@@ -128,7 +128,7 @@ func TestReceiverPillAndPolicyPrefs(t *testing.T) {
 	if u.pillAgents.text.Text != "Agents idle" {
 		t.Errorf("agents pill = %q", u.pillAgents.text.Text)
 	}
-	pol := LEDPolicy{Attention: pad.LEDSetting{Mode: 3}, Otherwise: pad.LEDSetting{Mode: 0}}
+	pol := LEDPolicy{Attention: pad.LEDSetting{Mode: 2}, Otherwise: pad.LEDSetting{Mode: 0}}
 	u.setLEDPolicy(pol)
 	u.loadLEDPolicy(0x8890)
 	if got := *u.policy.Load(); got != pol {

@@ -62,12 +62,31 @@ What you can control depends on the model:
 
 | Model | Control | Colours |
 |---|---|---|
-| `8890` | built-in effect **modes** by index (`0` = off), global for the pad | ❌ firmware has no colour control |
+| `8890` | exactly **3 modes**: `0` Off · `1` Key glow · `2` Rainbow chase | ❌ none (see below) |
 | `8840` / `8842` | per layer (1–3): `off`, `backlight`, `shock`, `shock2`, `press` | red, orange, yellow, green, cyan, blue, purple (+ white for backlight) |
 
-- The `8890` firmware is undocumented; effect labels in the app are editable. Run `just led-probe` to cycle the modes and see what each does on your unit.
 - `8840` LED colours are affected by [ch57x-keyboard-tool#180](https://github.com/kriomant/ch57x-keyboard-tool/issues/180) in v1.7.0 (fixed on master, unreleased).
 - agentpad only writes when the LED setting changes and at most once every 2&nbsp;s, to spare the device.
+
+### What the 8890 can (not) do
+
+The `8890` LED command is `03 b0 18 <mode>` followed by `03 aa a1` (save). We tested it exhaustively on real hardware
+with `agentpad led-lab` and cross-checked other implementations:
+
+| Source | Finding |
+|---|---|
+| Vendor Windows tool, ported in [fleximus/macro_keyboard](https://github.com/fleximus/macro_keyboard) (`protocol.v`) | LED is key slot `0xB0`, type 8, `mode 0, 1 or 2`; no colour field |
+| [CodexPad](https://github.com/cha978rlie/CodexPad) (same pad) | only modes 0/1/2: off, one key glowing, running colours |
+| [ch57x-keyboard-tool](https://github.com/kriomant/ch57x-keyboard-tool) | `led <mode>` only |
+| agentpad LED lab | modes `0` off, `1` key 1 glows (purple on our unit, red on others), `2` 1→2→3 chase changing colour each round; modes `3+` fall back to a default glow; extra bytes after the mode (RGB, colour index, speed candidates) are ignored |
+
+**Conclusion:** the firmware has no colour, brightness or speed control. For colours, use an `8840`/`8842` board.
+
+### LED lab (for other boards)
+
+`agentpad led-lab notes [phase...]` sends experimental LED packets one step at a time and records what you see
+(`~/.local/state/agentpad/led-lab-notes.txt`). The pad is captured during the run, so pressing its keys is safe.
+`agentpad led-lab list` shows the phases; `agentpad led-raw <hex>...` sends raw 64-byte packets. Keep agentpad closed while experimenting.
 
 ## Orientation
 

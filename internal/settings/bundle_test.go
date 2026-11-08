@@ -52,7 +52,7 @@ func TestBundleRoundTrip(t *testing.T) {
 	// source machine
 	src := openT(t, t.TempDir())
 	if err := src.Update(func(x *Settings) {
-		x.LED.Basic.Attention = LED{Mode: 4}
+		x.LED.Basic.Attention = LED{Mode: 1}
 		x.Pad.Orientation = profile.OrientClockwise
 	}); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestBundleRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := dst.Get()
-			if got.LED.Basic.Attention.Mode != 4 || got.Pad.Orientation != profile.OrientClockwise {
+			if got.LED.Basic.Attention.Mode != 1 || got.Pad.Orientation != profile.OrientClockwise {
 				t.Fatalf("settings not applied: %+v", got)
 			}
 			if got.UI.Theme != ThemeSystem {
@@ -170,7 +170,7 @@ func TestBundleRoundTrip(t *testing.T) {
 			if !reflect.DeepEqual(snapshot(t, dst.Dir()), before) {
 				t.Fatalf("restore mismatch:\n%v\nwant\n%v", snapshot(t, dst.Dir()), before)
 			}
-			if dst.Get().UI.Theme != ThemeDark || dst.Get().LED.Basic.Attention.Mode != 1 {
+			if dst.Get().UI.Theme != ThemeDark || dst.Get().LED.Basic.Attention.Mode != 2 {
 				t.Fatalf("store not reloaded: %+v", dst.Get())
 			}
 			if backups, _ := dst.Backups(); len(backups) != 2 || backups[0].Name != safety {
@@ -186,7 +186,7 @@ func TestPlanImportPartialSettingsMerge(t *testing.T) {
 schema: 1
 settings:
   led:
-    "8890": {attention: {mode: 2}}
+    "8890": {attention: {mode: 1}}
   future_thing: 1
 profiles: []
 `))
@@ -198,7 +198,7 @@ profiles: []
 		t.Fatal(err)
 	}
 	if len(plan.Changes) != 1 || plan.Changes[0].Path != "led.8890.attention" ||
-		plan.Changes[0].Old != "{mode: 1}" || plan.Changes[0].New != "{mode: 2}" {
+		plan.Changes[0].Old != "{mode: 2}" || plan.Changes[0].New != "{mode: 1}" {
 		t.Fatalf("changes = %v", plan.Changes)
 	}
 	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "settings.future_thing") {
