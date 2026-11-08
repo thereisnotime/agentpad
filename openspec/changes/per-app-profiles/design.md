@@ -51,3 +51,28 @@ and the target differs from what the pad holds.
      (Wayland) or `_NET_ACTIVE_WINDOW` client message to `WINDOWID` / pid lookup (X11).
 - Triggers: pad gesture (configurable, default knob long-press), tray menu item,
   notification action. Queue: waiting sessions ordered by when they started waiting.
+
+### Implementation notes (2026-11-08)
+
+- zellij 0.44.3: `focus-pane-id` sent from outside the session does not move the
+  attached client's focus and does not switch tabs. The jump runs
+  `list-panes --json --tab` → `go-to-tab-by-id T` → `focus-pane-id` →
+  `focus-next-pane` until `list-clients` shows the pane (bounded by the tab's
+  pane count). Verified against a throwaway session with one attached client.
+- KWin raise: the script gets a list of candidate PIDs (Konsole's PID from
+  `GetConnectionUnixProcessID`, then the agent and its ancestors) and the Konsole
+  tab title as a caption hint, since one Konsole process can own several windows.
+  It reports back with `callDBus` to agentpad's unique bus name
+  (`dev.thereisnotime.agentpad.Jump.Result`) and is unloaded right after
+  (≤300 ms). Verified on KWin 6.6.5.
+- X11: `_NET_ACTIVE_WINDOW` (source 2) to `WINDOWID` when it fits 32 bits, else
+  the `_NET_CLIENT_LIST` window whose `_NET_WM_PID` matches a candidate PID.
+  Konsole on Wayland exports a meaningless `WINDOWID`, so X11 is only used on
+  X11 sessions.
+- Waiting queue = sessions in `attention` (tool pending), ordered by
+  `WaitingSince`; `waiting_input` stays idle as before. Cycling uses
+  `Tracker.NextWaiting(lastKey)`; an unknown key restarts at the oldest.
+- The OpenCode plugin snippet posts the v2 envelope itself, with the origin read
+  from `process.env` and `process.pid`.
+- Notifications: `org.freedesktop.Notifications.Notify` with `default` and
+  `jump` actions, `replaces_id` per session key, 200 ms call timeout.

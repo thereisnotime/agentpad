@@ -2,6 +2,7 @@ package hook
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thereisnotime/agentpad/internal/events"
 )
 
 type recv struct {
@@ -43,10 +46,10 @@ func TestRunForwards(t *testing.T) {
 		wantPath    string
 		wantBody    string
 	}{
-		{"claude stdin", "claude", nil, claude, "POST /v1/events/claude", claude},
-		{"opencode stdin", "opencode", nil, opencode, "POST /v1/events/opencode", opencode},
-		{"codex argv", "codex", []string{"--flag", codex}, "ignored", "POST /v1/events/codex", codex},
-		{"codex stdin fallback", "codex", nil, codex, "POST /v1/events/codex", codex},
+		{"claude stdin", "claude", nil, claude, "POST /v2/events/claude", claude},
+		{"opencode stdin", "opencode", nil, opencode, "POST /v2/events/opencode", opencode},
+		{"codex argv", "codex", []string{"--flag", codex}, "ignored", "POST /v2/events/codex", codex},
+		{"codex stdin fallback", "codex", nil, codex, "POST /v2/events/codex", codex},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,8 +59,18 @@ func TestRunForwards(t *testing.T) {
 			}
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			if len(r.paths) != 1 || r.paths[0] != tc.wantPath || r.body[0] != tc.wantBody {
+			if len(r.paths) != 1 || r.paths[0] != tc.wantPath {
 				t.Fatalf("got %v %v", r.paths, r.body)
+			}
+			var env struct {
+				Payload json.RawMessage `json:"payload"`
+				Origin  *events.Origin  `json:"origin"`
+			}
+			if err := json.Unmarshal([]byte(r.body[0]), &env); err != nil || string(env.Payload) != tc.wantBody {
+				t.Fatalf("body %s (%v)", r.body[0], err)
+			}
+			if env.Origin == nil || env.Origin.AgentPID == 0 {
+				t.Fatalf("no origin in %s", r.body[0])
 			}
 		})
 	}

@@ -75,10 +75,12 @@ func TestCodexSnippet(t *testing.T) {
 func TestOpenCodePlugin(t *testing.T) {
 	js := OpenCodePlugin("127.0.0.1:47321")
 	for _, want := range []string{
-		`"http://127.0.0.1:47321/v1/events/opencode"`,
+		`"http://127.0.0.1:47321/v2/events/opencode"`,
 		"export const AgentpadPlugin = async",
 		"event: async ({ event })",
-		"JSON.stringify(event)",
+		"JSON.stringify({ payload: event, origin: ORIGIN })",
+		"konsole_session: env.KONSOLE_DBUS_SESSION",
+		"zellij_pane: env.ZELLIJ_PANE_ID",
 		"AbortSignal.timeout(300)",
 		"catch",
 		"~/.config/opencode/plugins/agentpad.js",

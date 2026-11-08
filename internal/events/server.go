@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,10 +14,15 @@ import (
 	"github.com/thereisnotime/agentpad/internal/config"
 )
 
-const maxBody = 1 << 20
+const (
+	maxBody = 1 << 20
+	// maxBodyV2 leaves room for the envelope and for an escaped non-JSON payload.
+	maxBodyV2 = 2*maxBody + 64<<10
+)
 
-// Server receives events on POST /v1/events/{agent} (loopback only) and
-// answers GET /v1/health with 200 "ok".
+// Server receives events on POST /v1/events/{agent} (raw agent payload) and
+// POST /v2/events/{agent} (an Envelope with payload + origin), loopback only,
+// and answers GET /v1/health with 200 "ok".
 type Server struct {
 	addr    string
 	onEvent func(Event)
@@ -98,6 +104,7 @@ func (s *Server) boundAddr() string {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+config.EventsPath+"{agent}", s.handleEvent)
+	mux.HandleFunc("POST "+EventsV2Path+"{agent}", s.handleEventV2)
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = io.WriteString(w, "ok")
@@ -106,20 +113,49 @@ func (s *Server) routes() http.Handler {
 }
 
 func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
+	agent, body, ok := readEvent(w, r, maxBody)
+	if !ok {
+		return
+	}
+	s.onEvent(Normalize(agent, body, time.Now()))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleEventV2(w http.ResponseWriter, r *http.Request) {
+	agent, body, ok := readEvent(w, r, maxBodyV2)
+	if !ok {
+		return
+	}
+	var env Envelope
+	if err := json.Unmarshal(body, &env); err != nil || env.Payload == nil {
+		// Not an envelope: treat the whole body as the payload, like v1.
+		s.onEvent(Normalize(agent, body, time.Now()))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	e := Normalize(agent, env.payloadBytes(), time.Now())
+	if env.Origin != nil && !env.Origin.IsZero() {
+		o := *env.Origin
+		e.Origin = &o
+	}
+	s.onEvent(e)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func readEvent(w http.ResponseWriter, r *http.Request, limit int64) (string, []byte, bool) {
 	agent := r.PathValue("agent")
 	switch agent {
 	case AgentClaude, AgentCodex, AgentOpenCode:
 	default:
 		http.NotFound(w, r)
-		return
+		return "", nil, false
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		http.Error(w, "payload too large or unreadable", http.StatusRequestEntityTooLarge)
-		return
+		return "", nil, false
 	}
-	s.onEvent(Normalize(agent, body, time.Now()))
-	w.WriteHeader(http.StatusNoContent)
+	return agent, body, true
 }
 
 func isLoopback(host string) bool {
