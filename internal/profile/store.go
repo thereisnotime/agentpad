@@ -96,6 +96,11 @@ func (s *fileStore) Save(p Profile) error {
 	if err := Validate(p); err != nil {
 		return err
 	}
+	// Saving a profile identical to its built-in removes the override, so
+	// "edited" only ever means "differs from the built-in".
+	if b, ok := builtin(p.Name); ok && Equal(b, p) {
+		return s.Reset(p.Name)
+	}
 	b, err := yaml.Marshal(p)
 	if err != nil {
 		return err
