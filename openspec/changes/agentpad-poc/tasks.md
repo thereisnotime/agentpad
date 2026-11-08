@@ -6,13 +6,13 @@
 
 ## 2. Device and profiles (`internal/pad`, `internal/profile`)
 
-- [ ] 2.1 sysfs pad detection for `1189:8890/8840/8842`
-- [ ] 2.2 `ch57x-keyboard-tool` writer: upload mapping, set LED, map errors (permission, missing tool)
-- [ ] 2.3 LED controller: change-only, 2 s rate limit
-- [ ] 2.4 Built-in profiles, validation against supported key names
-- [ ] 2.5 YAML profile store with override + reset in XDG config dir
-- [ ] 2.6 Mapping YAML generation with layer assignment
-- [ ] 2.7 Unit tests
+- [x] 2.1 sysfs pad detection for `1189:8890/8840/8842`
+- [x] 2.2 `ch57x-keyboard-tool` writer: upload mapping, set LED, map errors (permission, missing tool)
+- [x] 2.3 LED controller: change-only, 2 s rate limit
+- [x] 2.4 Built-in profiles, validation against supported key names
+- [x] 2.5 YAML profile store with override + reset in XDG config dir
+- [x] 2.6 Mapping YAML generation with layer assignment
+- [x] 2.7 Unit tests
 
 ## 3. Agent events (`internal/events`, `internal/hook`, `internal/setup`)
 
