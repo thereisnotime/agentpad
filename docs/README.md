@@ -12,4 +12,6 @@
 | [Development](development.md) | Building (X11 / Wayland), just recipes, tests, specs, CI |
 | [Troubleshooting](troubleshooting.md) | Pad not detected, permission denied, no events, port busy |
 
+**Screenshots:** every screen, wide and narrow, in [screenshots/](screenshots/). Demo: [GIF](demo/agentpad-demo.gif) · [MP4](demo/agentpad-demo.mp4).
+
 [← Back to the main README](../README.md)

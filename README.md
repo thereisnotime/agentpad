@@ -22,6 +22,12 @@
   <a href="https://github.com/thereisnotime/agentpad/issues/new?template=bug_report.yml">Report a bug</a>
 </p>
 
+<p align="center">
+  <img src="docs/demo/agentpad-demo.gif" width="900" alt="agentpad demo: a Claude Code session asks for permission to run Bash, the agents pill turns orange, the session card offers Jump, then key 1 on the drawn pad lights up and Claude goes back to busy; the knob turns, gesture mode shows key 3 hold sending ctrl-c, and the pad drawing rotates to vertical and back"/>
+  <br/>
+  <sub>Claude asks for permission → pad lights up → press key 1 · <a href="docs/demo/agentpad-demo.mp4">MP4</a></sub>
+</p>
+
 ---
 
 `agentpad` is a native Linux desktop app for the cheap **CH57x "3 keys + 1 knob"** USB macro pads.
@@ -68,6 +74,21 @@ flowchart LR
 3. When an agent asks for permission, the pad and tray light up. Press a key to answer.
 
 More detail: [Architecture](docs/architecture.md).
+
+<table>
+  <tr>
+    <td width="33%"><a href="docs/screenshots/profiles-wide.png"><img src="docs/screenshots/profiles-wide.png" alt="Profiles screen: the drawn pad with key and knob actions and the inspector"/></a></td>
+    <td width="33%"><a href="docs/screenshots/pad-wide.png"><img src="docs/screenshots/pad-wide.png" alt="Pad screen: device status, live input mode and LED controls"/></a></td>
+    <td width="33%"><a href="docs/screenshots/profiles-gestures.png"><img src="docs/screenshots/profiles-gestures.png" alt="Profiles in gesture mode: gesture slots for key 3 and the recognised gestures monitor"/></a></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Profiles</sub></td>
+    <td align="center"><sub>Pad &amp; LEDs</sub></td>
+    <td align="center"><sub>Gesture mode</sub></td>
+  </tr>
+</table>
+
+More screens in [docs/screenshots](docs/screenshots/).
 
 ## Quick start
 

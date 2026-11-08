@@ -6,6 +6,8 @@ package ui
 //
 //	SHOT_DIR=docs/screenshots go test -tags 'wayland screenshots' -run TestScreenshots ./internal/ui
 //
+// demo_test.go renders the README demo frames the same way (just demo-gif).
+//
 // Nothing touches the real pad: the tool path does not exist and no
 // receiver is started.
 
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/driver/software"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 
@@ -43,31 +46,7 @@ func TestScreenshots(t *testing.T) {
 	if dir == "" {
 		t.Skip("SHOT_DIR not set")
 	}
-	tmp := t.TempDir()
-	a := test.NewTempApp(t)
-	u := newAppUI(a, Deps{
-		Writer:  &pad.ToolWriter{Path: filepath.Join(tmp, "no-such-tool")},
-		Store:   profile.NewFileStore(filepath.Join(tmp, "profiles")),
-		Bin:     "/home/me/.local/bin/agentpad",
-		Version: "v0.3.0",
-		LogPath: "/home/me/.local/state/agentpad/events.jsonl",
-		Addr:    "127.0.0.1:47321",
-		Input:   silentInput{make(chan PadInputEvent)},
-		Live:    LiveDevices{Disabled: true},
-		Jumper:  noJumper{},
-		Notifier: func(func(string)) (NotifyBackend, error) {
-			return nil, errors.New("no notifications in screenshots")
-		},
-	})
-	u.ledFollow.Store(false)
-	t.Cleanup(u.shutdown)
-	u.win.SetPadded(false)
-	u.sessions.home = "/home/me"
-	u.showDevice(pad.Device{VendorID: 0x1189, ProductID: 0x8890, BusPath: "1-4", Product: "CH57x pad"}, nil)
-	u.pillRecv.set(colorSuccess, "Receiver live")
-	u.pad.toolIcon.SetResource(theme.NewSuccessThemedResource(theme.ConfirmIcon()))
-	u.pad.toolTitle.SetText("ch57x-keyboard-tool ready")
-	u.pad.toolHint.Hide()
+	u := newShotUI(t, noJumper{})
 
 	now := time.Now()
 	for _, e := range []events.Event{
@@ -83,7 +62,7 @@ func TestScreenshots(t *testing.T) {
 		if prep != nil {
 			prep()
 		}
-		c := u.win.Canvas().(test.WindowlessCanvas)
+		c := u.win.Canvas().(software.WindowlessCanvas)
 		c.SetScale(2)
 		u.win.Resize(fyne.NewSize(w, h))
 		// let size-dependent layouts settle
@@ -96,9 +75,8 @@ func TestScreenshots(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer f.Close()
 		enc := png.Encoder{CompressionLevel: png.BestCompression}
-		if err := enc.Encode(f, c.Capture()); err != nil {
+		if err := errors.Join(enc.Encode(f, c.Capture()), f.Close()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -159,6 +137,38 @@ func TestScreenshots(t *testing.T) {
 	for v, n := range map[iconVariant]string{iconVariantIdle: "idle", iconVariantBusy: "busy", iconVariantAttention: "attention", iconVariantApp: "app"} {
 		_ = os.WriteFile(filepath.Join(tmpOr(dir), "icon-"+n+".svg"), padIconSVG(v), 0o644)
 	}
+}
+
+// newShotUI builds the app UI offscreen with fake devices: a missing tool
+// path, no receiver, no live input, an 8890 pad and a live receiver pill.
+func newShotUI(t *testing.T, jumper JumpBackend) *appUI {
+	t.Helper()
+	tmp := t.TempDir()
+	a := test.NewTempApp(t)
+	u := newAppUI(a, Deps{
+		Writer:  &pad.ToolWriter{Path: filepath.Join(tmp, "no-such-tool")},
+		Store:   profile.NewFileStore(filepath.Join(tmp, "profiles")),
+		Bin:     "/home/me/.local/bin/agentpad",
+		Version: "v0.3.0",
+		LogPath: "/home/me/.local/state/agentpad/events.jsonl",
+		Addr:    "127.0.0.1:47321",
+		Input:   silentInput{make(chan PadInputEvent)},
+		Live:    LiveDevices{Disabled: true},
+		Jumper:  jumper,
+		Notifier: func(func(string)) (NotifyBackend, error) {
+			return nil, errors.New("no notifications in screenshots")
+		},
+	})
+	u.ledFollow.Store(false)
+	t.Cleanup(u.shutdown)
+	u.win.SetPadded(false)
+	u.sessions.home = "/home/me"
+	u.showDevice(pad.Device{VendorID: 0x1189, ProductID: 0x8890, BusPath: "1-4", Product: "CH57x pad"}, nil)
+	u.pillRecv.set(colorSuccess, "Receiver live")
+	u.pad.toolIcon.SetResource(theme.NewSuccessThemedResource(theme.ConfirmIcon()))
+	u.pad.toolTitle.SetText("ch57x-keyboard-tool ready")
+	u.pad.toolHint.Hide()
+	return u
 }
 
 // tmpOr is where the per-state icon SVGs go (SHOT_ICONS, else the scratch dir).

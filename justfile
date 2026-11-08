@@ -154,6 +154,27 @@ fake-event kind="permission_prompt":
     @printf '{"hook_event_name":"Notification","notification_type":"{{ kind }}","session_id":"dev-1","cwd":"%s","message":"Claude needs your permission to use Bash"}' "$PWD" | go run -tags "{{ tags }}" {{ pkg }} hook claude
     @printf "{{ c_green }}✔ sent{{ c_reset }} {{ kind }}\n"
 
+# Render the README demo offscreen into docs/demo (gif + mp4, 1.5x; needs ffmpeg, gifsicle optional)
+[group('dev')]
+demo-gif width="native":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v ffmpeg >/dev/null || { printf "{{ c_red }}✘ ffmpeg not found{{ c_reset }}\n"; exit 1; }
+    frames=$(mktemp -d); trap 'rm -rf "$frames"' EXIT
+    out="$PWD/docs/demo"; mkdir -p "$out"
+    printf "{{ c_blue }}▸ rendering frames{{ c_reset }} {{ c_dim }}(offscreen, takes a couple of minutes){{ c_reset }}\n"
+    DEMO_DIR="$frames" go test -count=1 -timeout 15m -tags "{{ tags }} screenshots" -run '^TestDemo$' ./internal/ui
+    in=(-loglevel error -y -framerate 12 -i "$frames/frame-%04d.png")
+    scale="null"; [ "{{ width }}" = native ] || scale="scale={{ width }}:-2:flags=lanczos"
+    printf "{{ c_blue }}▸ encoding{{ c_reset }} agentpad-demo.gif\n"
+    ffmpeg "${in[@]}" -vf "$scale,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" \
+        -loop 0 "$out/agentpad-demo.gif"
+    if command -v gifsicle >/dev/null; then gifsicle -O3 --batch "$out/agentpad-demo.gif"; else printf "{{ c_dim }}gifsicle not installed, skipping -O3{{ c_reset }}\n"; fi
+    printf "{{ c_blue }}▸ encoding{{ c_reset }} agentpad-demo.mp4\n"
+    ffmpeg "${in[@]}" -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart "$out/agentpad-demo.mp4"
+    printf "{{ c_green }}✔ demo{{ c_reset }}\n"
+    du -h "$out/agentpad-demo.gif" "$out/agentpad-demo.mp4" | sed "s|$PWD/||"
+
 # Record raw key events from the pad for a new gesture trace (libinput, Ctrl-C to stop)
 [group('dev')]
 gesture-trace:
