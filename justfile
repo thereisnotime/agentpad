@@ -120,6 +120,20 @@ tool-install tag="v1.7.0":
 detect:
     @lsusb -d 1189: || printf "{{ c_yellow }}no CH57x pad found{{ c_reset }}\n"
 
+# Cycle 8890 LED modes on the real pad; watch it and note what each mode does
+[group('device')]
+led-probe from="0" to="6" secs="4":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'ch57x-keyboard-tool led 0 >/dev/null 2>&1 || true; exit 130' INT TERM
+    for n in $(seq {{ from }} {{ to }}); do
+        printf "{{ c_bold }}{{ c_blue }}mode %s{{ c_reset }}\n" "$n"
+        ch57x-keyboard-tool led "$n"
+        sleep {{ secs }}
+    done
+    ch57x-keyboard-tool led 0
+    printf "{{ c_green }}✔ done{{ c_reset }}, leds back to mode 0 (off)\n"
+
 # Send a fake Claude Code event to the running app
 [group('dev')]
 fake-event kind="permission_prompt":

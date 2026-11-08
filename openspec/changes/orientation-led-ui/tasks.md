@@ -1,9 +1,9 @@
 ## 1. Backend
 
-- [ ] 1.1 `profile.Orientation`, `MappingYAMLOriented`, knob/key placement helpers + tests (validated by the real tool)
-- [ ] 1.2 `pad.LEDSetting`, `pad.CapsFor`, `ToolWriter.SetLED(LEDSetting)` arg building + validation + tests
-- [ ] 1.3 `LEDController` on `LEDSetting`
-- [ ] 1.4 `just led-probe` recipe to cycle 8890 modes on real hardware
+- [x] 1.1 `profile.Orientation`, `MappingYAMLOriented`, knob/key placement helpers + tests (validated by the real tool)
+- [x] 1.2 `pad.LEDSetting`, `pad.CapsFor`, `ToolWriter.SetLED(LEDSetting)` arg building + validation + tests
+- [x] 1.3 `LEDController` on `LEDSetting`
+- [x] 1.4 `just led-probe` recipe to cycle 8890 modes on real hardware
 
 ## 2. UI
 
