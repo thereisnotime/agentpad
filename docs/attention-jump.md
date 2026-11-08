@@ -2,8 +2,21 @@
 
 When an agent waits for you (a permission prompt), agentpad can bring its
 terminal back into focus: raise the window, select the terminal tab and focus
-the multiplexer pane. Triggers (pad gesture, tray item) come with the UI; the
-backend lives in `internal/jump` and `internal/notify`.
+the multiplexer pane. The backend lives in `internal/jump` and `internal/notify`.
+
+## Triggers
+
+- **Pad**: in gesture mode, the knob long hold of the built-in `claude-code`
+  profile runs `agentpad:jump`. Any gesture can be set to `agentpad:jump` in
+  the Profiles inspector (see [gestures](gestures.md#agentpad-actions)).
+- **Tray**: "Jump to waiting agent", disabled when nothing waits, with a count
+  when several do ("Jump to waiting agent (2)").
+- **Window**: a Jump button on every waiting session card, and one in the
+  header next to the agents pill while an agent needs you.
+- **Notification**: the Jump button (see below).
+
+The result shows as a toast, e.g. "Jumped to Claude · konsole tab 3 · zellij
+pane 2". Skipped steps are listed, failures show the reason.
 
 ## How it knows where the agent runs
 
@@ -43,10 +56,11 @@ waiting first.
 
 ## Notifications
 
-Optionally agentpad shows a desktop notification when a session starts
-waiting ("Claude Code needs you", tool and directory) with a **Jump** button.
+agentpad shows a desktop notification (toggle on the Pad screen, on by
+default) when a session starts waiting ("Claude Code needs you", tool and directory) with a **Jump** button.
 Clicking it (or the bubble) does the same jump. Repeated prompts from the same
-session update one notification.
+session update one notification, and it goes away when the session stops
+waiting.
 
 ## Supported setups
 

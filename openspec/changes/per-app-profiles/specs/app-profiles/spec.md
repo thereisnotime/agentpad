@@ -59,8 +59,12 @@ On a jump request the system SHALL bring the waiting agent into focus: raise its
 - **THEN** the jump still raises the window and selects the tab, and reports which steps were skipped
 
 ### Requirement: Attention notification
-The system SHALL optionally show a desktop notification when a session starts waiting, including agent, tool and directory, with a Jump action.
+The system SHALL optionally (on by default) show a desktop notification when a session starts waiting, including agent, tool and directory, with a Jump action, and SHALL dismiss it when the session stops waiting.
 
 #### Scenario: Notification jump
 - **WHEN** the user clicks Jump on the notification
 - **THEN** the same jump as the pad trigger is performed
+
+#### Scenario: Session answered
+- **WHEN** a waiting session continues (the prompt was answered in the terminal)
+- **THEN** its notification is dismissed

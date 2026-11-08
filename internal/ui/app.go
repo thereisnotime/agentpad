@@ -101,6 +101,8 @@ type appUI struct {
 	started    atomic.Bool // start ran: live input may open the pad
 	// post runs f on the UI goroutine (fyne.Do; tests queue instead).
 	post func(f func())
+	// openFile opens a file in the user's editor (xdg-open; tests fake it).
+	openFile func(path string) error
 
 	live     *liveController
 	liveJobs chan func()
@@ -168,6 +170,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.ledFollow.Store(u.prefs.LEDFollow())
 	u.notifyOn.Store(u.prefs.NotifyAttention())
 	u.post = fyne.Do
+	u.openFile = xdgOpen
 	u.mode = ModePlain
 	if d.Jumper == nil {
 		d.Jumper = jump.New()

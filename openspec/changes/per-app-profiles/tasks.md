@@ -25,4 +25,4 @@
 - [x] 5.1 Hook origin capture (env + agent pid + tty), v2 event envelope, events.Origin
 - [x] 5.2 Jump backends: zellij, tmux, Konsole D-Bus, window raise (KWin / X11)
 - [x] 5.3 Waiting queue + cycle, desktop notification with Jump action
-- [ ] 5.4 UI/tray/gesture triggers (after UI + gesture merges)
+- [x] 5.4 UI/tray/gesture triggers (after UI + gesture merges)

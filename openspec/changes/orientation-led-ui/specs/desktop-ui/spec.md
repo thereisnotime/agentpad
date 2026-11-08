@@ -34,3 +34,10 @@ The About screen SHALL open a prefilled GitHub bug report with the app version, 
 #### Scenario: Report a bug
 - **WHEN** the user presses "Report a bug"
 - **THEN** the browser opens the bug template with version, OS and pad filled in
+
+### Requirement: Open snippet target files
+The Setup screen SHALL offer an "Edit file" action per snippet that opens the snippet's target file in the user's default editor. A missing agent config file SHALL only be created empty after confirmation and never overwritten; the udev rule SHALL only be opened when it exists. agentpad SHALL NOT write snippet content into these files.
+
+#### Scenario: Missing Claude settings
+- **WHEN** the user clicks Edit file for Claude Code and `~/.claude/settings.json` does not exist
+- **THEN** agentpad asks before creating it empty, then opens it in the default editor

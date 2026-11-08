@@ -13,6 +13,7 @@
 - [x] 2.4 Session cards, log polish, setup polish
 - [x] 2.5 Device write worker; no USB on UI or receiver goroutines
 - [x] 2.6 Screenshots at 500 px and 1200 px
+- [x] 2.7 Setup: Edit file opens (or creates empty) the snippet's target file
 
 ## 3. Verify
 

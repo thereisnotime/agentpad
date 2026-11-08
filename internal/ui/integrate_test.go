@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -732,4 +733,71 @@ func TestAppJumpFromCardAndTray(t *testing.T) {
 	q.until(t, "toast", func() bool {
 		return u.toasts.box.Visible() && strings.HasPrefix(u.toasts.label.Text, "Jumped to Claude")
 	})
+}
+
+// ---- setup: edit file ----
+
+func TestPlanEdit(t *testing.T) {
+	have := map[string]bool{"/home/me/.codex/config.toml": true, "/etc/udev/rules.d/50-agentpad.rules": false}
+	exists := func(p string) bool { return have[p] }
+	tests := []struct {
+		t    editTarget
+		path string
+		step editStep
+	}{
+		{editTarget{Path: "~/.codex/config.toml"}, "/home/me/.codex/config.toml", editOpen},
+		{editTarget{Path: "~/.claude/settings.json"}, "/home/me/.claude/settings.json", editCreate},
+		{editTarget{Path: udevRulePath, ReadOnly: true}, udevRulePath, editUdevHint},
+		{editTarget{Path: "relative.txt"}, "relative.txt", editImpossible},
+		{editTarget{Path: ""}, "", editImpossible},
+	}
+	for _, tt := range tests {
+		p, step := planEdit(tt.t, "/home/me", exists)
+		if p != tt.path || step != tt.step {
+			t.Errorf("%+v: got %q %d, want %q %d", tt.t, p, step, tt.path, tt.step)
+		}
+	}
+	have[udevRulePath] = true
+	if _, step := planEdit(editTarget{Path: udevRulePath, ReadOnly: true}, "/home/me", exists); step != editOpen {
+		t.Error("an existing udev rule just opens")
+	}
+	if _, step := planEdit(editTarget{Path: "~/x"}, "", exists); step != editImpossible {
+		t.Error("no home, no path")
+	}
+}
+
+func TestCreateEmptyNeverOverwrites(t *testing.T) {
+	p := t.TempDir() + "/a/b/settings.json"
+	if fileExists(p) {
+		t.Fatal("exists")
+	}
+	if err := createEmpty(p); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(p); err != nil || st.Size() != 0 || st.Mode().Perm() != 0o644 {
+		t.Fatalf("created %v %v", st, err)
+	}
+	if err := os.WriteFile(p, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if createEmpty(p) == nil {
+		t.Error("must not overwrite")
+	}
+	if b, _ := os.ReadFile(p); string(b) != "keep" {
+		t.Error("content changed")
+	}
+}
+
+func TestEditFileOpensExisting(t *testing.T) {
+	u := newTestUI(t)
+	var opened []string
+	u.openFile = func(p string) error { opened = append(opened, p); return nil }
+	p := t.TempDir() + "/rule"
+	if err := os.WriteFile(p, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	u.editFile(editTarget{Path: p, ReadOnly: true})
+	if !slices.Equal(opened, []string{p}) {
+		t.Errorf("opened %q", opened)
+	}
 }

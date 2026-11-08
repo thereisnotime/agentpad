@@ -35,8 +35,8 @@ only works **while agentpad runs**.
    or `$XDG_RUNTIME_DIR/.ydotool_socket`).
 
 If the pad is unplugged, agentpad keeps retrying every second and picks it up
-again when it comes back. Leaving gesture mode releases the grab; the plain
-mapping has to be uploaded again to make the pad usable without agentpad.
+again when it comes back. Leaving gesture mode (or quitting agentpad) releases
+the grab and uploads the active profile's plain mapping again.
 
 ## Measured firmware behaviour (1189:8890)
 
@@ -119,6 +119,39 @@ Only the built-in `claude-code` profile ships gestures:
 | key 3    | `hold`        | `ctrl-c`    | interrupt Claude (tap is still Esc)   |
 | knob ccw | `pressrotate` | `shift-tab` | cycle the permission mode             |
 | knob cw  | `pressrotate` | `shift-tab` | cycle the permission mode             |
+| knob press | `longhold`  | `agentpad:jump` | jump to the waiting agent        |
+
+### agentpad actions
+
+Gesture actions starting with `agentpad:` are not typed. agentpad runs them
+itself (gesture mode only; the pad firmware can't send them in plain mode):
+
+| Action                  | Does                                                                 |
+| ----------------------- | -------------------------------------------------------------------- |
+| `agentpad:jump`         | [jump](attention-jump.md) to the waiting agent; again cycles through several, oldest first |
+| `agentpad:next-profile` | switch to the next profile (in gesture mode the pad mapping stays)   |
+
+Any other `agentpad:` name is rejected when the profile is saved.
+
+## Using it
+
+- **Switch modes** on the Pad screen (Plain / Gesture) or in the tray menu
+  (Mode). Switching to gesture programs the F13..F18 mapping, grabs the pad and
+  shows which virtual keyboard is in use (uinput or ydotool). Switching back to
+  plain, quitting (window, tray Quit, Ctrl-C or SIGTERM) stops gesture mode and
+  uploads the active profile's plain mapping again, so the pad keeps working
+  without agentpad.
+- **Edit gestures** on the Profiles screen: in gesture mode the inspector shows
+  one slot per gesture for the selected control (tap / hold / long hold /
+  double-tap, or turn / press + turn for the knob) plus the three chords. An
+  empty slot is not used; tap and turn fall back to the plain action, shown as
+  the placeholder.
+- **Watch it work**: in gesture mode the Profiles screen lists the last
+  recognised gestures, e.g. `key 1 · hold → ctrl-c`.
+- Applying a profile in gesture mode switches the profile agentpad uses; the
+  pad keeps its gesture mapping.
+- Thresholds (hold, long hold, double-tap) come from the settings; there is no
+  editor for them yet.
 
 ## Permissions
 
@@ -143,12 +176,16 @@ your apps and the pad drawing lights up as you press. In plain mode it maps
 keys back to controls from the active profile. If two controls send the same
 key (say key 1 and the knob press both send Enter), it can't tell them apart.
 It shows the first one in key1, key2, key3, knob-ccw, knob-press, knob-cw
-order and reports the ambiguity. Mouse actions can't be seen this way.
+order and the editor warns about it ("Key 1 and knob press both send Enter, so
+live input can't tell them apart"). Mouse actions can't be seen this way.
+Live input needs the same input permission as gesture mode (`just
+udev-install`, then replug the pad); without it the Profiles screen says so.
 
 ## Limitations
 
-- Only works while agentpad runs. Quitting releases the pad, but the pad keeps
-  sending F13..F18 until a plain mapping is uploaded again.
+- Only works while agentpad runs. Quitting uploads the plain mapping again;
+  if agentpad is killed hard (SIGKILL, crash, pad unplugged at the moment of
+  quitting) the pad keeps sending F13..F18 until you apply a profile.
 - Mouse actions (`click`, `wheel(...)`, `move(...)`, `drag(...)`) are not
   supported in gesture mode.
 - Press+rotate ends after 500 ms without a detent because the firmware does

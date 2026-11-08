@@ -7,9 +7,9 @@
 
 ## 2. UI
 
-- [ ] 2.1 Mode switch (plain / gesture) with permission checks
-- [ ] 2.2 Inspector shows tap / hold / long hold / double-tap / press+rotate actions per control
-- [ ] 2.3 Live gesture monitor (what agentpad recognised)
+- [x] 2.1 Mode switch (plain / gesture) with permission checks
+- [x] 2.2 Inspector shows tap / hold / long hold / double-tap / press+rotate actions per control
+- [x] 2.3 Live gesture monitor (what agentpad recognised)
 
 ## 3. Setup
 

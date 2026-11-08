@@ -23,14 +23,23 @@ func TestCopyButton(t *testing.T) {
 }
 
 func TestSnippetCardCopies(t *testing.T) {
-	a := test.NewTempApp(t)
-	card := snippetCard(a, "codex", "Codex CLI", "~/.codex/config.toml", `notify = ["agentpad"]`)
+	u := newTestUI(t)
+	a := u.app
+	card := u.snippetCard("codex", "Codex CLI", "~/.codex/config.toml", editTarget{Path: "~/.codex/config.toml"}, `notify = ["agentpad"]`)
 	test.NewTempWindow(t, card)
-	var btn *widget.Button
+	var btn, edit *widget.Button
 	for _, o := range test.LaidOutObjects(card) {
 		if b, ok := o.(*widget.Button); ok {
-			btn = b
+			switch b.Text {
+			case "Copy":
+				btn = b
+			case "Edit file":
+				edit = b
+			}
 		}
+	}
+	if edit == nil {
+		t.Error("no edit file button")
 	}
 	if btn == nil {
 		t.Fatal("no copy button")

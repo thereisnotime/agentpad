@@ -43,8 +43,7 @@ One Go binary with a native Fyne UI. No browser, no Electron, no Node.
 | 🖥️ **Tray** | Idle / busy / needs-attention at a glance. |
 | 🔒 **Local & safe** | Loopback-only receiver; hooks time out in 300&nbsp;ms and never block an agent. |
 
-**Coming next:** [gestures](docs/gestures.md) (hold, double-tap, press+rotate), [attention jump](docs/attention-jump.md)
-(one press takes you to the Konsole tab / zellij pane of the waiting agent), and per-app profiles on X11 and KDE Wayland.
+**Coming next:** per-app profiles on X11 and KDE Wayland.
 
 ## How it works
 
@@ -99,8 +98,8 @@ Build requirements (Go 1.27, just, Fyne's C headers) are in [Development](docs/d
 | [Hardware](docs/hardware.md) | Supported pads, USB-C quirk, LEDs per model, orientation, udev |
 | [Agent integration](docs/agents.md) | Claude Code, Codex CLI, OpenCode hooks and what each event means |
 | [Profiles](docs/profiles.md) | Built-in profiles, action syntax, layers, storage |
-| [Gestures](docs/gestures.md) | Hold, double-tap, press+rotate, chords *(in progress)* |
-| [Attention jump](docs/attention-jump.md) | Jump to the waiting agent's tab / pane *(in progress)* |
+| [Gestures](docs/gestures.md) | Hold, double-tap, press+rotate, chords |
+| [Attention jump](docs/attention-jump.md) | Jump to the waiting agent's tab / pane |
 | [Architecture](docs/architecture.md) | Components, event model, receiver API, files |
 | [Development](docs/development.md) | X11 / Wayland builds, just recipes, tests, specs, CI |
 | [Troubleshooting](docs/troubleshooting.md) | Common problems and fixes |
