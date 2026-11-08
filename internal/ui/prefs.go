@@ -29,6 +29,10 @@ type Settings interface {
 	LEDLabel(n int) string
 	SetLEDLabel(n int, label string)
 
+	// ActiveProfile is the profile last applied to the pad ("" when none).
+	ActiveProfile() string
+	SetActiveProfile(name string)
+
 	// OnChange registers f to run (on the UI goroutine) after any change,
 	// including changes made outside the app.
 	OnChange(f func())
@@ -73,5 +77,8 @@ func (f fynePrefs) LEDLabel(n int) string { return strings.TrimSpace(f.p.String(
 func (f fynePrefs) SetLEDLabel(n int, label string) {
 	f.p.SetString(ledLabelKey(n), strings.TrimSpace(label))
 }
+
+func (f fynePrefs) ActiveProfile() string        { return f.p.String(prefActiveProfile) }
+func (f fynePrefs) SetActiveProfile(name string) { f.p.SetString(prefActiveProfile, name) }
 
 func (f fynePrefs) OnChange(fn func()) { f.p.AddChangeListener(func() { fyne.Do(fn) }) }

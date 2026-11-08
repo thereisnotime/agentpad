@@ -144,6 +144,9 @@ func (t *profilesTab) reload(keep string) {
 		}
 	}
 	t.chips.Refresh()
+	if t.u.tray != nil {
+		t.u.tray.rebuild()
+	}
 	if len(list) == 0 {
 		t.selected = -1
 		return
@@ -250,6 +253,9 @@ func (t *profilesTab) rotate(o profile.Orientation) {
 	t.u.prefs.SetOrientation(o)
 	t.view.setOrientation(o)
 	t.showOrientation()
+	if t.u.tray != nil {
+		t.u.tray.rebuild()
+	}
 }
 
 func (t *profilesTab) showOrientation() { t.orientLb.SetText(t.orient.Label()) }
@@ -295,36 +301,34 @@ func (t *profilesTab) apply() {
 	if t.selected < 0 {
 		return
 	}
-	p := t.edited()
-	if err := profile.Validate(p); err != nil {
-		t.showError("Fix this first: " + err.Error())
-		return
-	}
-	layers := profile.Layers(replaceProfile(t.profiles, p), p.Name)
-	doc, err := profile.MappingYAMLOriented(layers, t.orient)
-	if err != nil {
-		t.showError("Could not build the mapping: " + err.Error())
-		return
-	}
-	names := make([]string, len(layers))
-	for i, l := range layers {
-		names[i] = fmt.Sprintf("%d = %s", i+1, l.Name)
-	}
 	t.applyBtn.Disable()
 	t.applyBtn.SetText("Writing…")
-	t.u.dev.Upload(doc, func(err error) {
-		fyne.Do(func() {
-			t.applyBtn.Enable()
-			t.applyBtn.SetText("Apply to pad")
-			if err != nil {
-				t.showError("Apply failed: " + writeErrMessage(err))
+	t.u.applyProfile(t.edited(), t.profiles, func(names []string, err error) {
+		t.applyBtn.Enable()
+		t.applyBtn.SetText("Apply to pad")
+		if err != nil {
+			t.showError("Apply failed: " + writeErrMessage(err))
+			if names != nil {
 				t.u.showWriteError("Apply failed", err)
-				return
 			}
-			t.hideMessage()
-			t.u.toasts.show(toastSuccess, "Written to the pad. Layers: "+strings.Join(names, ", ")+".")
-		})
+			return
+		}
+		t.hideMessage()
+		t.u.toasts.show(toastSuccess, "Written to the pad. Layers: "+strings.Join(names, ", ")+".")
 	})
+}
+
+// selectByName shows profile name in the editor unless there are unsaved edits.
+func (t *profilesTab) selectByName(name string) {
+	if !reflect.DeepEqual(t.draft, t.stored) {
+		return
+	}
+	for i, p := range t.profiles {
+		if p.Name == name {
+			t.selectProfile(i)
+			return
+		}
+	}
 }
 
 func (t *profilesTab) showError(s string) {

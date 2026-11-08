@@ -23,6 +23,7 @@ const (
 	prefLEDFollow     = "led.follow"
 	prefAttentionMode = "led.attentionMode" // pre-v2 8890 attention mode, migrated once
 	prefOrientation   = "orientation"
+	prefActiveProfile = "profile.active"
 	pollInterval      = 2 * time.Second
 	sessionTTL        = 30 * time.Minute
 	logRows           = 200
@@ -364,12 +365,60 @@ func (u *appUI) settingsChanged() {
 	if o := u.prefs.Orientation(); o != u.profiles.orient {
 		u.profiles.rotate(o)
 	}
+	u.tray.rebuild()
+}
+
+// applyProfile writes p (as layer 1, plus the next two profiles) to the pad
+// through the device worker. done runs on the UI goroutine. UI goroutine.
+func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func(names []string, err error)) {
+	if err := profile.Validate(p); err != nil {
+		done(nil, fmt.Errorf("fix this first: %w", err))
+		return
+	}
+	layers := profile.Layers(replaceProfile(all, p), p.Name)
+	doc, err := profile.MappingYAMLOriented(layers, u.profiles.orient)
+	if err != nil {
+		done(nil, fmt.Errorf("could not build the mapping: %w", err))
+		return
+	}
+	names := make([]string, len(layers))
+	for i, l := range layers {
+		names[i] = fmt.Sprintf("%d = %s", i+1, l.Name)
+	}
+	u.dev.Upload(doc, func(err error) {
+		fyne.Do(func() {
+			if err == nil {
+				u.prefs.SetActiveProfile(p.Name)
+				u.tray.rebuild()
+			}
+			done(names, err)
+		})
+	})
+}
+
+// activateProfile makes the stored profile name active and applies it (tray). UI goroutine.
+func (u *appUI) activateProfile(name string) {
+	p, err := u.deps.Store.Get(name)
+	if err != nil {
+		u.toasts.show(toastError, "Profile "+name+": "+err.Error())
+		return
+	}
+	u.profiles.selectByName(name)
+	u.toasts.show(toastInfo, "Applying "+name+"…")
+	u.applyProfile(p, u.profiles.profiles, func(_ []string, err error) {
+		if err != nil {
+			u.toasts.show(toastError, "Could not apply "+name+": "+writeErrMessage(err))
+			return
+		}
+		u.toasts.show(toastSuccess, "Active profile: "+name+".")
+	})
 }
 
 // setLEDFollow persists the "LED follows agents" toggle. UI goroutine.
 func (u *appUI) setLEDFollow(on bool) {
 	u.ledFollow.Store(on)
 	u.prefs.SetLEDFollow(on)
+	u.tray.rebuild()
 	if on {
 		u.led.Forget()
 		u.followLED()

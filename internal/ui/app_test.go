@@ -141,3 +141,15 @@ func TestNavigate(t *testing.T) {
 		t.Error("nav items not updated")
 	}
 }
+
+func TestActiveProfileSetting(t *testing.T) {
+	u := newTestUI(t)
+	u.prefs.SetActiveProfile("codex")
+	if u.prefs.ActiveProfile() != "codex" {
+		t.Errorf("active = %q", u.prefs.ActiveProfile())
+	}
+	if st := u.tray.state(); st.Active != "codex" || len(st.Profiles) == 0 {
+		t.Errorf("tray state = %+v", st)
+	}
+	u.tray.rebuild() // must not panic without a tray
+}
