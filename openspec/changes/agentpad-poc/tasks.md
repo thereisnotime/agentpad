@@ -26,12 +26,12 @@
 
 ## 4. Desktop UI (`internal/ui`, `cmd/agentpad`)
 
-- [ ] 4.1 Fyne app, main window with Pad / Profiles / Sessions / Log / Setup
-- [ ] 4.2 Visual 3-key + knob profile editor with save/reset/apply
-- [ ] 4.3 Live sessions + log bound to the event receiver
-- [ ] 4.4 Setup tab with copy buttons
-- [ ] 4.5 Tray icon reflecting aggregate state, close-to-tray
-- [ ] 4.6 LED policy wiring (aggregate state -> pad LED)
+- [x] 4.1 Fyne app, main window with Pad / Profiles / Sessions / Log / Setup
+- [x] 4.2 Visual 3-key + knob profile editor with save/reset/apply
+- [x] 4.3 Live sessions + log bound to the event receiver
+- [x] 4.4 Setup tab with copy buttons
+- [x] 4.5 Tray icon reflecting aggregate state, close-to-tray
+- [x] 4.6 LED policy wiring (aggregate state -> pad LED)
 
 ## 5. Verify
 
