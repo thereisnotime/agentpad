@@ -64,10 +64,27 @@ func labPhases() map[string][]labStep {
 			p["byte5"] = append(p["byte5"], labStep{fmt.Sprintf("mode %d + byte 5 = %#02x", mode, b), wrap8890(ledMode(mode, 0, b))})
 		}
 	}
+	// Round 2: byte 4 looked like a colour index for mode 1 (0 purple,
+	// 1 cyan, 0xff blue) and byte 5 like a blink speed.
+	for v := 0; v <= 15; v++ {
+		p["color1"] = append(p["color1"], labStep{fmt.Sprintf("mode 1, byte 4 = %d · which COLOUR after it settles?", v), wrap8890(ledMode(1, byte(v)))})
+	}
+	for _, v := range []byte{0x20, 0x40, 0x80, 0xc0, 0xfe} {
+		p["color1"] = append(p["color1"], labStep{fmt.Sprintf("mode 1, byte 4 = %#02x · which COLOUR?", v), wrap8890(ledMode(1, v))})
+	}
+	for _, v := range []byte{0, 1, 2, 3, 5, 8, 16} {
+		p["speed"] = append(p["speed"], labStep{fmt.Sprintf("mode 1, colour 1, byte 5 = %d · blink speed? steady?", v), wrap8890(ledMode(1, 1, v))})
+	}
+	for v := 0; v <= 7; v++ {
+		p["color2"] = append(p["color2"], labStep{fmt.Sprintf("mode 2, byte 4 = %d · chase colours? still changing every round?", v), wrap8890(ledMode(2, byte(v)))})
+	}
+	for _, v := range []byte{0, 1, 2, 3} {
+		p["press"] = append(p["press"], labStep{fmt.Sprintf("mode 3, byte 4 = %d · PRESS each key now: does it light? which colour?", v), wrap8890(ledMode(3, v))})
+	}
 	return p
 }
 
-var labOrder = []string{"modes", "rgb", "index", "byte5"}
+var labOrder = []string{"modes", "rgb", "index", "byte5", "color1", "speed", "color2", "press"}
 
 func runLedLab(args []string) int {
 	if len(args) == 0 || args[0] == "list" {
