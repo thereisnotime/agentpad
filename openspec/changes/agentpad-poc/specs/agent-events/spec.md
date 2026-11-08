@@ -34,7 +34,7 @@ The system SHALL normalise agent payloads into events with agent, session ID, ki
 - **THEN** it is logged with kind `other` and does not change session state
 
 ### Requirement: Session tracking and aggregate state
-The system SHALL track the latest state per session and derive an aggregate state of `attention` (any session waiting for the user), `busy` (any session working) or `idle`.
+The system SHALL track the latest state per session and derive an aggregate state of `attention` (any session waiting for a permission decision), `busy` (any session working) or `idle`.
 
 #### Scenario: Attention
 - **WHEN** one session is waiting for permission and another is working
