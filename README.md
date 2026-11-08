@@ -132,6 +132,7 @@ The **Setup** tab generates these for you. They are shown here for reference.
     "SessionStart":     [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
     "Notification":     [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
+    "PermissionRequest":[{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
     "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }],
     "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "agentpad hook claude" }] }]
@@ -146,10 +147,12 @@ The **Setup** tab generates these for you. They are shown here for reference.
 ```toml
 notify = ["agentpad", "hook", "codex"]
 ```
+
+Codex `notify` only reports finished turns, so Codex sessions show busy/idle but not pending approvals yet. Codex's newer lifecycle hooks will close that gap.
 </details>
 
 <details>
-<summary><strong>OpenCode</strong> · <code>~/.config/opencode/plugin/agentpad.js</code></summary>
+<summary><strong>OpenCode</strong> · <code>~/.config/opencode/plugins/agentpad.js</code></summary>
 
 A small plugin that forwards session and permission events to `agentpad hook opencode`. Copy it from the Setup tab.
 </details>
