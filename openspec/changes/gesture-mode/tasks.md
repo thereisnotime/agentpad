@@ -1,9 +1,9 @@
 ## 1. Core
 
-- [ ] 1.1 Gesture recogniser state machine (pure, injected clock) + exhaustive tests from recorded traces
-- [ ] 1.2 evdev reader + grab for the pad nodes (sysfs discovery by USB ID)
-- [ ] 1.3 uinput virtual keyboard output, ydotool fallback
-- [ ] 1.4 Gesture fields in profiles, gesture-mode mapping (F13–F18)
+- [x] 1.1 Gesture recogniser state machine (pure, injected clock) + exhaustive tests from recorded traces
+- [x] 1.2 evdev reader + grab for the pad nodes (sysfs discovery by USB ID)
+- [x] 1.3 uinput virtual keyboard output, ydotool fallback
+- [x] 1.4 Gesture fields in profiles, gesture-mode mapping (F13–F18)
 
 ## 2. UI
 
@@ -13,4 +13,4 @@
 
 ## 3. Setup
 
-- [ ] 3.1 udev rules for input nodes and uinput, `just udev-install` update, README section
+- [x] 3.1 udev rules for input nodes and uinput, `just udev-install` update, README section (docs/gestures.md; README link pending)

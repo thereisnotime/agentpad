@@ -10,6 +10,13 @@ func Builtins() []Profile {
 			Description: "Claude Code permission prompt: 1 yes, 2 yes and don't ask again, Esc no",
 			Keys:        [3]string{"1", "2", "escape"},
 			Knob:        nav,
+			// Gesture mode only (docs/gestures.md): hold key 3 to interrupt,
+			// press+rotate the knob to cycle the permission mode.
+			Gestures: map[string]map[string]string{
+				CtrlKey3:    {KindHold: "ctrl-c"},
+				CtrlKnobCCW: {KindPressRotate: "shift-tab"},
+				CtrlKnobCW:  {KindPressRotate: "shift-tab"},
+			},
 		},
 		{
 			Name:        "codex",

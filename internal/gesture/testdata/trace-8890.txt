@@ -1,0 +1,22 @@
+# Real 1189:8890, recorded with `libinput debug-events --show-keycodes` on 2026-11-08.
+# Pad in plain mode with knob ccw=up, press=enter, cw=down (claude-code profile),
+# so KEY_ENTER = knob-press, KEY_DOWN = knob-cw, KEY_UP = knob-ccw.
+#
+# 1. knob held ~3 s
++0.000s  KEY_ENTER pressed
++3.056s  KEY_ENTER released
+# 2. knob pressed and held, then rotated; the firmware force-releases the
+#    press in the same millisecond as the first detent
++4.864s  KEY_ENTER pressed
++5.896s  KEY_ENTER released
++5.896s  KEY_DOWN  pressed
++5.904s  KEY_DOWN  released
++6.104s  KEY_DOWN  pressed
++6.112s  KEY_DOWN  released
++6.600s  KEY_UP    pressed
++6.608s  KEY_UP    released
++7.392s  KEY_DOWN  pressed
++7.400s  KEY_DOWN  released
+# 3. knob pressed ~0.8 s
++13.096s KEY_ENTER pressed
++13.872s KEY_ENTER released

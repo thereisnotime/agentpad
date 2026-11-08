@@ -42,3 +42,10 @@ The system SHALL emit a chord action when two keys are pressed within the chord 
 #### Scenario: Key 1 + key 3
 - **WHEN** keys 1 and 3 are pressed within 80 ms
 - **THEN** the chord action for 1+3 is emitted and neither key's own action is emitted
+
+### Requirement: Live input observation
+The system SHALL be able to read the pad's key events without grabbing them, so keys still reach the focused application, and SHALL map them to controls using the active profile, reporting controls that cannot be told apart.
+
+#### Scenario: Ambiguous plain mapping
+- **WHEN** key 1 and the knob press both send Enter in plain mode
+- **THEN** an Enter press is shown as key 1 and the mapping is reported as ambiguous
