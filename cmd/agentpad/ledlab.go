@@ -2,14 +2,18 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thereisnotime/agentpad/internal/config"
+	"github.com/thereisnotime/agentpad/internal/evdev"
+	"github.com/thereisnotime/agentpad/internal/vkbd"
 
 	"github.com/thereisnotime/agentpad/internal/usbraw"
 )
@@ -202,6 +206,39 @@ func runLabNotes(send func([][]byte) error, phases []string) int {
 	}
 	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintf(f, "\n# session %s\n", time.Now().Format(time.RFC3339))
+	// Grab the pad so presses during a step never reach this terminal (a key
+	// sending Enter would otherwise submit the note). Presses are recorded per
+	// step instead.
+	var (
+		pressMu sync.Mutex
+		pressed []string
+	)
+	if pad, gerr := evdev.OpenPad(); gerr == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer func() { cancel(); _ = pad.Close() }()
+		go func() {
+			_ = pad.Read(ctx, func(e evdev.KeyEvent) {
+				if e.Down {
+					pressMu.Lock()
+					pressed = append(pressed, vkbd.KeyName(e.Code))
+					pressMu.Unlock()
+				}
+			})
+		}()
+		fmt.Println("Pad input is captured during the lab: pressing pad keys is safe and gets recorded.")
+	} else {
+		fmt.Println("Could not capture pad input (", gerr, "): don't press pad keys while the lab runs.")
+	}
+	takePresses := func() string {
+		pressMu.Lock()
+		defer pressMu.Unlock()
+		if len(pressed) == 0 {
+			return ""
+		}
+		out := " [pad presses: " + strings.Join(pressed, " ") + "]"
+		pressed = nil
+		return out
+	}
 	in := bufio.NewScanner(os.Stdin)
 	fmt.Printf("LED lab: notes go to %s\n", path)
 	fmt.Println("For each step: look at the pad, type what you see and press Enter.")
@@ -218,6 +255,7 @@ func runLabNotes(send func([][]byte) error, phases []string) int {
 		}
 		fmt.Printf("\n== %s (%d steps) ==\n", ph, len(steps))
 		for i := 0; i < len(steps); i++ {
+			takePresses()
 			if err := send(steps[i].msgs); err != nil {
 				fmt.Fprintln(os.Stderr, "send error:", err)
 				_, _ = fmt.Fprintf(f, "%s %d | %s | ERROR %v\n", ph, i, steps[i].label, err)
@@ -237,7 +275,7 @@ func runLabNotes(send func([][]byte) error, phases []string) int {
 			case "":
 				note = "(no change)"
 			}
-			_, _ = fmt.Fprintf(f, "%s %d | %s | %s\n", ph, i, steps[i].label, note)
+			_, _ = fmt.Fprintf(f, "%s %d | %s | %s%s\n", ph, i, steps[i].label, note, takePresses())
 		}
 	}
 	return 0
