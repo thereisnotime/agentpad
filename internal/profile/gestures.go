@@ -102,7 +102,7 @@ func (p Profile) GestureAction(control, kind string) (action string, ok bool) {
 	return action, action != ""
 }
 
-func validateGestures(g map[string]map[string]string) error {
+func validateGestures(g map[string]map[string]string, resolve func(string) bool) error {
 	controls := make([]string, 0, len(g))
 	for c := range g {
 		controls = append(controls, c)
@@ -123,7 +123,7 @@ func validateGestures(g map[string]map[string]string) error {
 			if !slices.Contains(kinds, k) {
 				return fmt.Errorf("gesture %s %s: kind not valid here (want %s)", c, k, strings.Join(kinds, ", "))
 			}
-			if err := validateGestureAction(g[c][k]); err != nil {
+			if err := validateGestureAction(g[c][k], resolve); err != nil {
 				return fmt.Errorf("gesture %s %s: %w", c, k, err)
 			}
 		}
@@ -151,14 +151,17 @@ func AgentpadActions() []string { return []string{ActionJump, ActionNextProfile}
 // IsAgentpadAction reports whether a is a reserved agentpad action.
 func IsAgentpadAction(a string) bool { return slices.Contains(AgentpadActions(), a) }
 
-func validateGestureAction(a string) error {
+func validateGestureAction(a string, resolve func(string) bool) error {
 	if strings.HasPrefix(a, AgentpadPrefix) {
 		if IsAgentpadAction(a) {
 			return nil
 		}
 		return fmt.Errorf("unknown agentpad action %q (want one of %s)", a, strings.Join(AgentpadActions(), ", "))
 	}
-	if err := validateAction(a); err != nil {
+	if strings.HasPrefix(a, RunPrefix) {
+		return validateRun(a, resolve)
+	}
+	if err := validateAction(a, resolve); err != nil {
 		return err
 	}
 	for _, part := range splitSequence(a) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/scripts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -230,6 +232,8 @@ const (
 	AreaSettings = "settings"
 	AreaProfile  = "profile"
 	AreaRules    = "rules"
+	AreaScripts  = "scripts"
+	AreaHooks    = "hooks"
 )
 
 // Change is one line of an import preview.
@@ -239,8 +243,14 @@ type Change struct {
 	// Path is the dotted settings path, the profile name, or "rules.yaml".
 	Path string
 	// Old and New are display values: scalars for settings, YAML for
-	// profiles. Empty for adds (Old) and removals (New).
+	// profiles, the command line for scripts. Empty for adds (Old) and
+	// removals (New).
 	Old, New string
+	// Dangerous marks changes that make agentpad run commands (scripts and
+	// hooks added or changed). They need explicit consent: see Plan.Consent.
+	Dangerous bool
+
+	hook scripts.Hook // AreaHooks: the hook added or removed
 }
 
 func (c Change) String() string {
@@ -250,7 +260,7 @@ func (c Change) String() string {
 	case Remove:
 		return fmt.Sprintf("- %s %s", c.Area, c.Path)
 	}
-	if c.Area == AreaSettings {
+	if c.Area == AreaSettings || c.Area == AreaScripts {
 		return fmt.Sprintf("~ %s %s: %s -> %s", c.Area, c.Path, c.Old, c.New)
 	}
 	return fmt.Sprintf("~ %s %s", c.Area, c.Path)
@@ -263,6 +273,7 @@ type Plan struct {
 	Warnings []string
 
 	settings *Settings // nil: settings unchanged
+	base     Settings  // settings the plan was computed against
 	save     []profile.Profile
 	remove   []string
 	rules    []byte // nil: rules unchanged
@@ -270,6 +281,69 @@ type Plan struct {
 
 // Empty reports whether applying the plan would change nothing.
 func (p *Plan) Empty() bool { return len(p.Changes) == 0 }
+
+// Dangerous returns the changes that need consent (scripts and hooks added
+// or changed), in preview order.
+func (p *Plan) Dangerous() []Change {
+	var out []Change
+	for _, c := range p.Changes {
+		if c.Dangerous {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// Consent returns a copy of p keeping only the dangerous changes accept
+// returns true for; every other change is kept as is. A refused script
+// keeps its current definition (or stays absent), a refused hook is not
+// added. Apply the returned plan. A hook or profile that needs a refused
+// script then fails validation in Apply, before anything is written.
+func (p *Plan) Consent(accept func(Change) bool) *Plan {
+	out := *p
+	out.Changes = nil
+	var next *Settings
+	if p.settings != nil {
+		n := p.settings.Clone()
+		next = &n
+	}
+	for _, c := range p.Changes {
+		if !c.Dangerous || accept(c) {
+			out.Changes = append(out.Changes, c)
+			continue
+		}
+		if next == nil {
+			continue
+		}
+		switch c.Area {
+		case AreaScripts:
+			if old, ok := p.base.Scripts[c.Path]; ok {
+				next.Scripts[c.Path] = old.Clone()
+			} else {
+				delete(next.Scripts, c.Path)
+			}
+		case AreaHooks:
+			next.Hooks = slices.DeleteFunc(next.Hooks, func(h scripts.Hook) bool { return h == c.hook })
+		}
+	}
+	if next != nil && len(next.Scripts) == 0 {
+		next.Scripts = nil
+	}
+	if next != nil && len(next.Hooks) == 0 {
+		next.Hooks = nil
+	}
+	settingsLeft := false
+	for _, c := range out.Changes {
+		if c.Area == AreaSettings || c.Area == AreaScripts || c.Area == AreaHooks {
+			settingsLeft = true
+		}
+	}
+	if !settingsLeft {
+		next = nil
+	}
+	out.settings = next
+	return &out
+}
 
 // Count returns the number of changes of kind k.
 func (p *Plan) Count(k ChangeKind) int {
@@ -288,14 +362,20 @@ func (p *Plan) Count(k ChangeKind) int {
 // problem it returns a *ValidationError naming the field or profile and
 // control, with bundle line numbers.
 func (s *Store) PlanImport(b *Bundle, mode ImportMode) (*Plan, error) {
-	plan := &Plan{Mode: mode}
-	var errs []FieldError
 	cur := s.Get()
+	plan := &Plan{Mode: mode, base: cur}
+	var errs []FieldError
+	resolve := cur.HasScript
 
 	if b.Settings != nil {
 		next := Defaults()
 		if mode == Merge {
 			next = cur.Clone()
+		}
+		if mode == Merge {
+			// decoding replaces the scripts map and hooks list; merging keeps
+			// what the bundle doesn't mention
+			next.Scripts, next.Hooks = nil, nil
 		}
 		if err := b.Settings.Decode(&next); err != nil {
 			for _, fe := range yamlErrors(err) {
@@ -306,6 +386,11 @@ func (s *Store) PlanImport(b *Bundle, mode ImportMode) (*Plan, error) {
 			for _, w := range unknownKeys(b.Settings, reflect.TypeFor[Settings](), "settings") {
 				plan.Warnings = append(plan.Warnings, strings.Replace(w, "(kept, but agentpad ignores it)", "(not imported)", 1))
 			}
+			if mode == Merge {
+				next.Scripts = mergeScripts(cur.Scripts, next.Scripts)
+				next.Hooks = mergeHooks(cur.Hooks, next.Hooks)
+			}
+			resolve = next.HasScript
 			if se := Validate(next); len(se) > 0 {
 				for i := range se {
 					se[i].Path = "settings." + se[i].Path
@@ -319,7 +404,7 @@ func (s *Store) PlanImport(b *Bundle, mode ImportMode) (*Plan, error) {
 	}
 
 	if b.Profiles != nil {
-		errs = append(errs, s.planProfiles(b, plan)...)
+		errs = append(errs, s.planProfiles(b, plan, resolve)...)
 	}
 
 	if b.Rules != nil {
@@ -346,7 +431,33 @@ func (s *Store) PlanImport(b *Bundle, mode ImportMode) (*Plan, error) {
 	return plan, nil
 }
 
-func (s *Store) planProfiles(b *Bundle, plan *Plan) []FieldError {
+// mergeScripts is cur with add's scripts added or replaced.
+func mergeScripts(cur, add map[string]scripts.Script) map[string]scripts.Script {
+	if len(cur) == 0 && len(add) == 0 {
+		return nil
+	}
+	out := make(map[string]scripts.Script, len(cur)+len(add))
+	for k, v := range cur {
+		out[k] = v.Clone()
+	}
+	for k, v := range add {
+		out[k] = v.Clone()
+	}
+	return out
+}
+
+// mergeHooks is cur followed by the hooks of add it doesn't have yet.
+func mergeHooks(cur, add []scripts.Hook) []scripts.Hook {
+	out := slices.Clone(cur)
+	for _, h := range add {
+		if !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (s *Store) planProfiles(b *Bundle, plan *Plan, resolve func(string) bool) []FieldError {
 	var errs []FieldError
 	seen := map[string]bool{}
 	for i, p := range b.Profiles {
@@ -355,7 +466,7 @@ func (s *Store) planProfiles(b *Bundle, plan *Plan) []FieldError {
 		if p.Name == "" {
 			path = fmt.Sprintf("profiles[%d]", i)
 		}
-		if err := profile.Validate(p); err != nil {
+		if err := profile.ValidateWith(p, resolve); err != nil {
 			errs = append(errs, FieldError{Path: path, Line: n.Line, Column: n.Column, Message: err.Error()})
 			continue
 		}
@@ -443,6 +554,9 @@ func leaves(s Settings) ([]string, map[string]string) {
 	vals := map[string]string{}
 	var walk func(n *yaml.Node, prefix string)
 	walk = func(n *yaml.Node, prefix string) {
+		if prefix == "scripts" || prefix == "hooks" {
+			return // diffed by diffScripts / diffHooks
+		}
 		if n.Kind == yaml.MappingNode && n.Style != yaml.FlowStyle {
 			for i := 0; i+1 < len(n.Content); i += 2 {
 				walk(n.Content[i+1], strings.TrimPrefix(prefix+"."+n.Content[i].Value, "."))
@@ -481,6 +595,58 @@ func diffSettings(old, next Settings) []Change {
 			out = append(out, Change{Kind: Remove, Area: AreaSettings, Path: p, Old: o[p]})
 		}
 	}
+	out = append(out, diffScripts(old.Scripts, next.Scripts)...)
+	return append(out, diffHooks(old.Hooks, next.Hooks)...)
+}
+
+// scriptText is the display value of a script: its command plus options.
+func scriptText(s scripts.Script) string {
+	t := s.Preview()
+	if s.Cwd != "" {
+		t += "  (in " + s.Cwd + ")"
+	}
+	if len(s.Env) > 0 {
+		keys := slices.Sorted(maps.Keys(s.Env))
+		t += "  env " + strings.Join(keys, ",")
+	}
+	if s.Timeout > 0 {
+		t += "  timeout " + s.Timeout.String()
+	}
+	return t
+}
+
+func diffScripts(old, next map[string]scripts.Script) []Change {
+	var out []Change
+	for _, name := range slices.Sorted(maps.Keys(next)) {
+		ns := next[name]
+		prev, had := old[name]
+		switch {
+		case !had:
+			out = append(out, Change{Kind: Add, Area: AreaScripts, Path: name, New: scriptText(ns), Dangerous: true})
+		case !reflect.DeepEqual(prev, ns):
+			out = append(out, Change{Kind: Modify, Area: AreaScripts, Path: name, Old: scriptText(prev), New: scriptText(ns), Dangerous: true})
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(old)) {
+		if _, ok := next[name]; !ok {
+			out = append(out, Change{Kind: Remove, Area: AreaScripts, Path: name, Old: scriptText(old[name])})
+		}
+	}
+	return out
+}
+
+func diffHooks(old, next []scripts.Hook) []Change {
+	var out []Change
+	for _, h := range next {
+		if !slices.Contains(old, h) {
+			out = append(out, Change{Kind: Add, Area: AreaHooks, Path: h.String(), New: h.String(), Dangerous: true, hook: h})
+		}
+	}
+	for _, h := range old {
+		if !slices.Contains(next, h) {
+			out = append(out, Change{Kind: Remove, Area: AreaHooks, Path: h.String(), Old: h.String(), hook: h})
+		}
+	}
 	return out
 }
 
@@ -497,8 +663,12 @@ func (s *Store) Apply(plan *Plan) (string, error) {
 			return "", &ValidationError{File: "plan", Errors: errs}
 		}
 	}
+	resolve := s.Get().HasScript
+	if plan.settings != nil {
+		resolve = plan.settings.HasScript
+	}
 	for _, p := range plan.save {
-		if err := profile.Validate(p); err != nil {
+		if err := profile.ValidateWith(p, resolve); err != nil {
 			return "", fmt.Errorf("profile %s: %w", p.Name, err)
 		}
 	}

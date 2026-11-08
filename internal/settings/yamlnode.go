@@ -105,6 +105,14 @@ func locate(root *yaml.Node, path string) *yaml.Node {
 		return n
 	}
 	for part := range strings.SplitSeq(path, ".") {
+		if n.Kind == yaml.SequenceNode {
+			i, err := strconv.Atoi(part)
+			if err != nil || i < 0 || i >= len(n.Content) {
+				return n
+			}
+			n = n.Content[i]
+			continue
+		}
 		if n.Kind != yaml.MappingNode {
 			return n
 		}
@@ -216,7 +224,23 @@ func encodeNode(s Settings) (*yaml.Node, error) {
 	if err := n.Encode(s); err != nil {
 		return nil, err
 	}
+	plainHookKeys(&n)
 	return &n, nil
+}
+
+// plainHookKeys writes the hook key `on:` unquoted. yaml.v3 quotes "on"
+// because YAML 1.1 read it as a boolean; as a mapping key of a hook it is
+// always a string, and docs/configuration.md shows it bare.
+func plainHookKeys(root *yaml.Node) {
+	if i := findKey(root, "hooks"); i >= 0 {
+		for _, h := range root.Content[i+1].Content {
+			for j := 0; j+1 < len(h.Content); j += 2 {
+				if k := h.Content[j]; k.Value == "on" {
+					k.Style = 0
+				}
+			}
+		}
+	}
 }
 
 // render writes doc with 2-space indentation.
@@ -238,7 +262,8 @@ const fileHeader = `agentpad settings (schema 1)
 Edit freely: agentpad reloads this file a moment after you save it.
 Invalid values are reported (with the line) and ignored; the last good
 settings stay active. Unknown keys are kept and listed as warnings.
-Reference: docs/configuration.md in the agentpad repository.`
+Reference: docs/configuration.md in the agentpad repository.
+Scripts and event hooks (scripts:, hooks:): docs/scripts.md.`
 
 // keyComments are head comments for the commented first-run file, by path.
 var keyComments = map[string]string{
@@ -266,10 +291,16 @@ var keyComments = map[string]string{
 	"gestures.long_hold_ms":    "Press at least this long to count as a long hold: more than hold_ms, up to 10000",
 	"gestures.double_tap_ms":   "Max gap between two taps of a double-tap: 100-1000",
 	"gestures.chord_window_ms": "Max gap between the two key presses of a chord: 10-500",
-	"notifications":            "Desktop notifications.",
-	"notifications.attention":  "Notify when an agent needs attention: true | false",
-	"ui":                       "Desktop UI.",
-	"ui.theme":                 "Colour theme: system | dark | light",
+	"scripts": "Your own commands, run from the pad (action run:NAME), from hooks or with Run now.\n" +
+		"  NAME: {run: [cmd, arg, ...]} or {shell: \"command line\"}, plus optional cwd, env, timeout.\n" +
+		"  See docs/scripts.md.",
+	"hooks": "Run a script on an agentpad event:\n" +
+		"  - {on: attention | busy | idle | session_start | session_end | gesture | profile_applied |\n" +
+		"      mode_changed | pad_connected | pad_disconnected | jump, agent: claude | codex | opencode, script: NAME}",
+	"notifications":           "Desktop notifications.",
+	"notifications.attention": "Notify when an agent needs attention: true | false",
+	"ui":                      "Desktop UI.",
+	"ui.theme":                "Colour theme: system | dark | light",
 }
 
 // commentedDoc renders s as a document with explanatory comments.

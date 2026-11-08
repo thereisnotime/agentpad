@@ -353,3 +353,15 @@ func TestControlsMatchProfile(t *testing.T) {
 		}
 	}
 }
+
+func TestPlainKeyMapScriptKeys(t *testing.T) {
+	p := profile.Profile{Name: "s", Keys: [3]string{"run:deploy", "a", "run:mic"}, Knob: profile.Knob{CCW: "up", Press: "enter", CW: "down"}}
+	km, rep, err := PlainKeyMap(p, profile.OrientNormal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// KEY_F19 = 189, KEY_F20 = 190
+	if km[189] != Key1 || km[190] != Key3 || len(rep.Unmapped) != 0 {
+		t.Fatalf("km = %v, unmapped %v", km, rep.Unmapped)
+	}
+}

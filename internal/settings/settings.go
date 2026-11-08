@@ -14,6 +14,7 @@ import (
 
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/scripts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,7 +54,21 @@ type Settings struct {
 	Gestures      GestureSettings      `yaml:"gestures"`
 	Notifications NotificationSettings `yaml:"notifications"`
 	UI            UISettings           `yaml:"ui"`
+	// Scripts are the user's named commands (run from the pad with
+	// run:<name>, from hooks or with Run now).
+	Scripts map[string]scripts.Script `yaml:"scripts,omitempty"`
+	// Hooks run scripts on agentpad events.
+	Hooks []scripts.Hook `yaml:"hooks,omitempty"`
 }
+
+// HasScript reports whether a script named name is defined.
+func (s Settings) HasScript(name string) bool {
+	_, ok := s.Scripts[name]
+	return ok
+}
+
+// ScriptNames returns the script names, sorted.
+func (s Settings) ScriptNames() []string { return slices.Sorted(maps.Keys(s.Scripts)) }
 
 // PadSettings describes the pad itself.
 type PadSettings struct {
@@ -202,12 +217,20 @@ func Defaults() Settings {
 	}
 }
 
-// Clone returns a deep copy of s (Labels is not shared).
+// Clone returns a deep copy of s (no maps or slices are shared).
 func (s Settings) Clone() Settings {
 	s.LED.Labels = maps.Clone(s.LED.Labels)
 	if s.LED.Labels == nil {
 		s.LED.Labels = map[string]string{}
 	}
+	if s.Scripts != nil {
+		m := make(map[string]scripts.Script, len(s.Scripts))
+		for k, v := range s.Scripts {
+			m[k] = v.Clone()
+		}
+		s.Scripts = m
+	}
+	s.Hooks = slices.Clone(s.Hooks)
 	return s
 }
 
@@ -320,5 +343,20 @@ func Validate(s Settings) []FieldError {
 	rng("gestures.chord_window_ms", g.ChordWindowMs, minChordMs, maxChordMs)
 
 	add("ui.theme", oneOf(s.UI.Theme, ThemeSystem, ThemeDark, ThemeLight))
+
+	for _, name := range s.ScriptNames() {
+		if !scripts.ValidName(name) {
+			add("scripts."+name, fmt.Errorf("%q is not a script name (a-z, 0-9 and -)", name))
+			continue
+		}
+		add("scripts."+name, s.Scripts[name].Validate())
+	}
+	scriptMap := s.Scripts
+	if scriptMap == nil {
+		scriptMap = map[string]scripts.Script{}
+	}
+	for i, h := range s.Hooks {
+		add(fmt.Sprintf("hooks.%d", i), h.Validate(scriptMap))
+	}
 	return errs
 }

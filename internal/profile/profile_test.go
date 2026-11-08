@@ -34,7 +34,7 @@ func TestBuiltinsValidate(t *testing.T) {
 
 func TestSupportedKeysValid(t *testing.T) {
 	for _, k := range SupportedKeys() {
-		if err := validateAction(k); err != nil {
+		if err := validateAction(k, nil); err != nil {
 			t.Errorf("%q: %v", k, err)
 		}
 	}
@@ -52,7 +52,7 @@ func TestValidateActions(t *testing.T) {
 		"ctrl-click", "ctrl-wheelup", "ctrl-move(1,1)", "shift-drag(left,-1,2)",
 	}
 	for _, a := range valid {
-		if err := validateAction(a); err != nil {
+		if err := validateAction(a, nil); err != nil {
 			t.Errorf("%q: unexpected error %v", a, err)
 		}
 	}
@@ -62,7 +62,7 @@ func TestValidateActions(t *testing.T) {
 		"wheel(128)", "wheel(-129)", "move(200,0)", "drag(top,0,0)", " a", "a,", "ctrl--a", "-a",
 	}
 	for _, a := range invalid {
-		if err := validateAction(a); err == nil {
+		if err := validateAction(a, nil); err == nil {
 			t.Errorf("%q: expected error", a)
 		}
 	}

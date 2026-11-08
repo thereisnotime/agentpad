@@ -57,10 +57,15 @@ var plainOrder = []Control{Key1, Key2, Key3, KnobCCW, KnobPress, KnobCW}
 // "a,b" -> A), or the first modifier of a bare modifier combo.
 // Collisions resolve to the first control in key1, key2, key3, knob-ccw,
 // knob-press, knob-cw order.
+//
+// run:<name> controls are mapped by the spare key plain mode programs for
+// them (profile.PlainLayers) as if p were layer 1; for layers 2 and 3 pass
+// the profiles already translated by profile.PlainLayers over all layers.
 func PlainKeyMap(p profile.Profile, o profile.Orientation) (KeyMap, KeyMapReport, error) {
 	if !slices.Contains(profile.Orientations(), o) {
 		return nil, KeyMapReport{}, fmt.Errorf("unknown orientation %q", string(o))
 	}
+	p = profile.PlainLayers([]profile.Profile{p})[0]
 	actions := map[Control]string{
 		Key1: p.Keys[0], Key2: p.Keys[1], Key3: p.Keys[2],
 		KnobCCW: p.Knob.CCW, KnobPress: p.Knob.Press, KnobCW: p.Knob.CW,

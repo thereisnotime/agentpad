@@ -81,7 +81,12 @@ func SupportedKeys() []string {
 var nameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // Validate checks every action; the error names the control, e.g. `key 2: unknown key "foo"`.
-func Validate(p Profile) error {
+// run:<name> actions are checked with the resolver set by SetScriptResolver.
+func Validate(p Profile) error { return ValidateWith(p, currentResolver()) }
+
+// ValidateWith is Validate with an explicit script resolver (nil accepts any
+// well-formed script name), e.g. for a bundle that brings its own scripts.
+func ValidateWith(p Profile, resolve func(name string) bool) error {
 	if !nameRe.MatchString(p.Name) {
 		return fmt.Errorf("name %q: must be non-empty and contain only a-z, 0-9 and -", p.Name)
 	}
@@ -94,16 +99,19 @@ func Validate(p Profile) error {
 		{"knob cw", p.Knob.CW},
 	}
 	for _, c := range controls {
-		if err := validateAction(c.action); err != nil {
+		if err := validateAction(c.action, resolve); err != nil {
 			return fmt.Errorf("%s: %w", c.label, err)
 		}
 	}
-	return validateGestures(p.Gestures)
+	return validateGestures(p.Gestures, resolve)
 }
 
-func validateAction(a string) error {
+func validateAction(a string, resolve func(string) bool) error {
 	if a == "" {
 		return errors.New("empty action")
+	}
+	if strings.HasPrefix(a, RunPrefix) {
+		return validateRun(a, resolve)
 	}
 	if mediaSet[a] {
 		return nil

@@ -95,6 +95,7 @@ func (o Orientation) Label() string {
 // and the button grid shape the tool expects (1x3 horizontal, 3x1 vertical).
 // The rows/columns header stays 1x3 (the physical board) for every orientation.
 // Keys stay in "as seen" order; the tool remaps them to the physical buttons.
+// run:<name> actions are written as F19..F24, see PlainLayers.
 func MappingYAMLOriented(layers []Profile, o Orientation) ([]byte, error) {
 	if o.index() < 0 {
 		return nil, fmt.Errorf("unknown orientation %q", string(o))
@@ -109,6 +110,9 @@ func MappingYAMLOriented(layers []Profile, o Orientation) ([]byte, error) {
 		if err := Validate(p); err != nil {
 			return nil, fmt.Errorf("profile %s: %w", p.Name, err)
 		}
+	}
+	// run:<name> controls send spare keys agentpad watches for
+	for _, p := range PlainLayers(layers) {
 		k := [3]quoted{quoted(p.Keys[0]), quoted(p.Keys[1]), quoted(p.Keys[2])}
 		buttons := [][]quoted{{k[0], k[1], k[2]}}
 		if o.Vertical() {
