@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -180,6 +181,9 @@ type toaster struct {
 	layer *fyne.Container
 	lay   *toastLayout
 	anim  *fyne.Animation
+	// closed stops pending hide timers once the UI shut down (tests run
+	// fyne.Do inline on the timer goroutine).
+	closed atomic.Bool
 }
 
 func newToaster() *toaster {
@@ -221,6 +225,9 @@ func (t *toaster) show(kind toastKind, msg string) {
 		d = 6 * time.Second
 	}
 	time.AfterFunc(d, func() {
+		if t.closed.Load() {
+			return
+		}
 		fyne.Do(func() {
 			if t.gen == gen {
 				t.box.Hide()
@@ -233,7 +240,7 @@ func (t *toaster) show(kind toastKind, msg string) {
 func (u *appUI) buildShell(screens []navScreen) fyne.CanvasObject {
 	brandName := text("agentpad", 18, colText, true)
 	brand := container.NewHBox(vcenter(fixed(32, 32, widget.NewIcon(iconApp))), vcenter(brandName))
-	pills := container.NewHBox(u.pillPad, u.pillAgents, u.jumpBtn, u.pillRecv)
+	pills := container.NewHBox(u.pillConfig, u.pillPad, u.pillAgents, u.jumpBtn, u.pillRecv)
 	headerBG := canvas.NewRectangle(colSurface)
 	header := container.NewBorder(nil, widget.NewSeparator(), nil, nil,
 		container.NewStack(headerBG, inset(10, 10, 16, 16, container.New(&headerLayout{}, brand, pills))))

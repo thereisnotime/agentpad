@@ -10,8 +10,8 @@
 
 ## 2. UI (after UI redesign merge)
 
-- [ ] 2.1 Swap ui prefs implementation to settings store, live reload
-- [ ] 2.2 Export / Import (preview dialog) / Open folder; per-profile Share (copy/paste/file)
+- [x] 2.1 Swap ui prefs implementation to settings store, live reload
+- [x] 2.2 Export / Import (preview dialog) / Open folder; per-profile Share (copy/paste/file)
 
 ## 3. Docs
 

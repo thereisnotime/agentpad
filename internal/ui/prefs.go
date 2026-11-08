@@ -76,6 +76,8 @@ type GestureTimings struct {
 	Hold      time.Duration
 	LongHold  time.Duration
 	DoubleTap time.Duration
+	// ChordWindow is the max gap between the two presses of a chord.
+	ChordWindow time.Duration
 }
 
 // config is the recogniser configuration (defaults for zero fields).
@@ -89,6 +91,9 @@ func (g GestureTimings) config() gesture.Config {
 	}
 	if g.DoubleTap > 0 {
 		c.DoubleTap = g.DoubleTap
+	}
+	if g.ChordWindow > 0 {
+		c.ChordWindow = g.ChordWindow
 	}
 	return c
 }

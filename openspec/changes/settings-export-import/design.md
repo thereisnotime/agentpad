@@ -87,3 +87,15 @@ rules: [...]               # optional, future
   not for `Update` (the caller knows), except when `Update` first adopted an unseen external edit.
 - **Single-profile share** lives in `internal/settings` (`ExportProfile`, `ParseProfile`,
   `ImportProfile`); `internal/profile` only gained `ValidName` and `IsBuiltin`.
+
+## Implementation notes (UI, tasks 2.1 / 2.2)
+
+- `ui.FileSettings` adapts `*settings.Store` to the UI `Settings` interface. `OnChange` fires after its own
+  setters and on external edits (`Store.Watch`); invalid edits go to `OnInvalid` and show a header pill, the
+  store keeps the last good values. All listener calls go through `fyne.Do`.
+- External `pad.mode` edits switch the mode like the Pad screen would; gesture timings apply the next time
+  gesture mode starts. `gestures.chord_window_ms` now reaches the recogniser.
+- Migration keys added for the UI's own preference names: `mode`, `notify.attention`, `gesture.holdMs`,
+  `gesture.longholdMs`, `gesture.doubletapMs` (0 = default). `ui.LegacyPrefs` reads them from Fyne preferences.
+- `Open` failing hard falls back to Fyne preferences with a warning toast; export/import are disabled then.
+- `Store.Watch` only watches `settings.yaml`; the UI polls `profiles/` (names, sizes, mtimes) on its 2 s loop.

@@ -37,7 +37,7 @@ func newAboutTab(u *appUI) fyne.CanvasObject {
 		newGrid(300,
 			newCard("Links", "", links),
 			newCard("License", "", license),
-			settingsCard(),
+			newSettingsCard(u),
 		),
 	))
 }
@@ -68,16 +68,4 @@ func (u *appUI) diagnostics() diagnostics {
 		OS:      localOS(),
 		Pad:     padString(u.device, u.deviceErr == nil),
 	}
-}
-
-// settingsCard is a placeholder for the settings.yaml export / import.
-func settingsCard() fyne.CanvasObject {
-	export := widget.NewButtonWithIcon("Export…", theme.DocumentSaveIcon(), nil)
-	imp := widget.NewButtonWithIcon("Import…", theme.FolderOpenIcon(), nil)
-	folder := widget.NewButtonWithIcon("Open settings folder", theme.FolderIcon(), nil)
-	for _, b := range []*widget.Button{export, imp, folder} {
-		b.Disable()
-	}
-	return newCard("Settings", "Export and import of settings.yaml are coming soon.",
-		chipRow(export, imp, folder))
 }

@@ -18,7 +18,9 @@ copy it between machines and share pieces of it.
 ```
 
 - `settings.yaml` is created with comments and defaults on first start. Older versions kept these values in Fyne
-  preferences; they are copied into `settings.yaml` once, the first time the file is created.
+  preferences; they are copied into `settings.yaml` once, the first time the file is created (orientation, active
+  profile, input mode, LED follow, LED policies and labels, notifications, gesture timings). Values that don't
+  validate are skipped. The old preferences are left in place but no longer read.
 - `profiles/` only holds profiles you changed or added. Built-ins are compiled in; deleting an override restores
   the built-in. See [Profiles](profiles.md) for the action grammar.
 - `backups/` is managed by agentpad. Each backup is a folder named after the UTC time it was taken
@@ -30,7 +32,13 @@ Edit it in any editor. agentpad notices the save within about a second and appli
 
 - **Invalid values** are reported with the field and line (for example
   `settings.yaml: line 3, column 16: pad.orientation: "sideways" is not allowed (want normal | clockwise | upsidedown | counterclockwise)`)
-  and ignored: the last valid settings stay active until you fix the file.
+  and ignored: the last valid settings stay active until you fix the file. The app shows a red
+  `settings.yaml: error on line N` pill in the header; click it for the full message and an **Open settings.yaml**
+  button. The pill goes away when the file is valid again.
+- Profile files in `profiles/` are picked up too (checked every 2 seconds). If you have unsaved edits in the
+  Profiles editor they are kept; the other profiles refresh.
+- If `settings.yaml` can't be opened at all (for example the folder isn't writable), agentpad starts anyway on the
+  old toolkit preferences and says so in a message; export and import are off until the next start.
 - **Unknown keys** are kept untouched and listed as warnings. Handy for notes or settings from a newer version.
 - **Comments are kept.** When agentpad itself changes a setting (for example when you rotate the pad in the UI) it
   edits only that value in place, so your comments, key order and quoting survive.
@@ -155,6 +163,20 @@ rules:                 # optional; rules.yaml content, passed through as is
 - Export includes `settings`, the profiles you changed or added (or all profiles), and `rules.yaml` if it exists.
 - Unknown keys in settings are reported as warnings and not imported.
 
+### In the app
+
+**About > Settings** has the buttons:
+
+- **Export…** asks whether to include the built-in profiles too (off: only the profiles you changed or added), then
+  where to save. The suggested name is `agentpad-<date>.agentpad.yaml`.
+- **Import…** opens a bundle and shows a preview grouped by settings, profiles and rules: additions in green, changes
+  in blue with old and new values, removals in red, warnings (such as unknown keys) last. Pick **Merge**, or
+  **Replace…** to see the replace preview first (with **Back** to return). A bundle that doesn't validate is refused
+  with the problems listed; nothing is changed. After an import the card shows `Imported · backup <name>` with a
+  **Restore backup** button that undoes it.
+- **Backups ▸** lists the backups, newest first, each with **Restore** (asks first).
+- **Open settings folder** opens the config folder in your file manager.
+
 ### Import
 
 Import never writes anything until you confirm:
@@ -186,6 +208,10 @@ exactly as they were, removing overrides that didn't exist at the time. You can 
 `backups/` by hand; agentpad picks up the change.
 
 ## Sharing a single profile
+
+On the **Profiles** screen, the **Share** button under Save / Reset / Apply has: **Copy as text**, **Save to file…**,
+**Import from clipboard** and **Import from file…**. Sharing uses the profile as shown in the editor (it must be
+valid). Import shows the profile first, then saves it and selects it; a toast says when it was renamed.
 
 A single profile can be copied as text (clipboard) or saved as a file:
 

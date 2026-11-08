@@ -23,6 +23,7 @@ import (
 	"github.com/thereisnotime/agentpad/internal/notify"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/settings"
 	"github.com/thereisnotime/agentpad/internal/vkbd"
 )
 
@@ -66,8 +67,16 @@ type Deps struct {
 	Addr    string // event receiver address; empty means config.ListenAddr
 	// Input is the live pad input used for on-screen feedback; nil disables it.
 	Input PadInput
-	// Settings stores user preferences; nil means Fyne preferences.
+	// Settings stores user preferences; nil means Fyne preferences. A
+	// *FileSettings (settings.yaml) also enables export, import, backups
+	// and live reload; its profile store is used when Store is nil.
 	Settings Settings
+	// SettingsWarning is shown once at start, e.g. when settings.yaml could
+	// not be opened and Fyne preferences are used instead.
+	SettingsWarning string
+	// ProfilesDir is polled for external profile edits; empty means the
+	// settings store's profiles dir, or none when Store was given.
+	ProfilesDir string
 	// Live are the devices for live input and gesture mode; zero fields
 	// mean the real evdev / uinput / ydotool. Ignored parts: when Input is
 	// set, plain-mode live input comes from Input instead.
@@ -89,6 +98,7 @@ type appUI struct {
 	led     *pad.LEDController
 	dev     *deviceWorker
 	tracker *events.Tracker
+	files   *settings.Store // nil with Fyne preferences
 	log     *events.Log
 	srv     *events.Server
 	recvErr error
@@ -113,8 +123,9 @@ type appUI struct {
 	jumpMu   sync.Mutex
 	lastJump string // key of the session jumped to last
 
-	stop     chan struct{}
-	stopOnce sync.Once
+	stop        chan struct{}
+	stopOnce    sync.Once
+	watchCancel context.CancelFunc
 
 	// UI goroutine only.
 	device     pad.Device
@@ -122,6 +133,9 @@ type appUI struct {
 	pillPad    *pill
 	pillAgents *pill
 	pillRecv   *pill
+	pillConfig *pill  // settings.yaml problem, hidden when fine
+	configErr  error  // last settings error shown in pillConfig
+	profileSig string // profiles dir signature last loaded
 	toasts     *toaster
 	nav        [][2]*navItem
 	screens    *fyne.Container
@@ -149,8 +163,24 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	if d.Writer == nil {
 		d.Writer = pad.NewToolWriter()
 	}
+	if d.Settings == nil {
+		d.Settings = newFynePrefs(a.Preferences())
+	}
+	var files *settings.Store
+	if fs, ok := d.Settings.(*FileSettings); ok {
+		files = fs.Store()
+		if d.Store == nil {
+			d.Store = files.Profiles()
+			if d.ProfilesDir == "" {
+				d.ProfilesDir = filepath.Join(files.Dir(), "profiles")
+			}
+		}
+	}
 	if d.Store == nil {
 		d.Store = profile.NewFileStore(filepath.Join(config.ConfigDir(), "profiles"))
+		if d.ProfilesDir == "" {
+			d.ProfilesDir = filepath.Join(config.ConfigDir(), "profiles")
+		}
 	}
 	if d.LogPath == "" {
 		d.LogPath = filepath.Join(config.StateDir(), "events.jsonl")
@@ -162,11 +192,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 		d.Version = "dev"
 	}
 	a.Settings().SetTheme(appTheme{})
-	u := &appUI{app: a, deps: d, stop: make(chan struct{}), deviceErr: pad.ErrNotConnected}
-	if d.Settings == nil {
-		d.Settings = newFynePrefs(a.Preferences())
-	}
-	u.deps.Settings = d.Settings
+	u := &appUI{app: a, deps: d, files: files, stop: make(chan struct{}), deviceErr: pad.ErrNotConnected}
 	u.prefs = d.Settings
 	u.ledFollow.Store(u.prefs.LEDFollow())
 	u.notifyOn.Store(u.prefs.NotifyAttention())
@@ -226,6 +252,8 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.pillAgents = newPill(func() { u.navigate(screenSessions) })
 	u.pillRecv = newPill(u.explainReceiver)
 	u.pillRecv.set(colorIdle, "Receiver starting")
+	u.pillConfig = newPill(u.explainConfigError)
+	u.pillConfig.Hide()
 	u.jumpBtn = widget.NewButtonWithIcon("Jump", theme.NavigateNextIcon(), u.jumpNext)
 	u.jumpBtn.Importance = widget.WarningImportance
 	u.jumpBtn.Hide()
@@ -250,6 +278,9 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	}
 
 	u.prefs.OnChange(u.settingsChanged)
+	if inv, ok := u.prefs.(interface{ OnInvalid(func(error)) }); ok {
+		inv.OnInvalid(u.showConfigError)
+	}
 
 	u.tray = newTray(u)
 	u.showDevice(pad.Device{}, pad.ErrNotConnected)
@@ -281,6 +312,15 @@ func (u *appUI) start() {
 		u.pillRecv.set(colorIdle, "Receiver off")
 	} else {
 		u.pillRecv.set(colorSuccess, "Receiver live")
+	}
+
+	if fs, ok := u.prefs.(*FileSettings); ok {
+		ctx, cancel := context.WithCancel(context.Background())
+		u.watchCancel = cancel
+		fs.Watch(ctx)
+	}
+	if u.deps.SettingsWarning != "" {
+		u.toasts.show(toastError, u.deps.SettingsWarning)
 	}
 
 	u.visible.Store(true)
@@ -336,6 +376,7 @@ func (u *appUI) loop() {
 			return
 		case now := <-t.C:
 			u.detect()
+			sig := dirSignature(u.deps.ProfilesDir)
 			changed := u.tracker.Prune(sessionTTL, now)
 			if changed {
 				u.followLED()
@@ -345,6 +386,9 @@ func (u *appUI) loop() {
 				u.tryLive(func() { _ = u.live.EnsureObserver() })
 			}
 			fyne.Do(func() {
+				if u.deps.ProfilesDir != "" && sig != u.profileSig {
+					u.profiles.externalReload()
+				}
 				u.sessions.refresh()
 				u.profiles.refreshMonitor(now)
 				if changed {
@@ -459,6 +503,18 @@ func (u *appUI) settingsChanged() {
 	if o := u.prefs.Orientation(); o != u.profiles.orient {
 		u.profiles.rotate(o)
 	}
+	if on := u.prefs.NotifyAttention(); on != u.notifyOn.Load() {
+		u.notifyOn.Store(on)
+		u.pad.modeSyncing = true
+		u.pad.notifyCheck.SetChecked(on)
+		u.pad.modeSyncing = false
+		u.notifyWaiting()
+	}
+	// pad.mode edited in the file: switch like the Pad screen would. Own
+	// switches store the mode after modeChanged, so they never get here.
+	if m := u.prefs.Mode(); m != u.mode && !u.modeBusy && u.started.Load() {
+		u.setMode(m)
+	}
 	u.tray.rebuild()
 }
 
@@ -571,6 +627,10 @@ func (u *appUI) showAgentsPill(s events.State) {
 func (u *appUI) shutdown() {
 	u.stopOnce.Do(func() {
 		close(u.stop)
+		u.toasts.closed.Store(true)
+		if u.watchCancel != nil {
+			u.watchCancel()
+		}
 		if u.srv != nil {
 			_ = u.srv.Close()
 		}
@@ -706,14 +766,14 @@ func (u *appUI) setMode(m Mode) {
 			u.post(func() {
 				u.modeBusy = false
 				if err != nil {
-					u.prefs.SetMode(ModePlain)
 					u.modeChanged(ModePlain)
+					u.prefs.SetMode(ModePlain)
 					u.pad.showModeError(err)
 					u.toasts.show(toastError, "Gesture mode is off: "+liveErrMessage(err))
 					return
 				}
-				u.prefs.SetMode(ModeGesture)
 				u.modeChanged(ModeGesture)
+				u.prefs.SetMode(ModeGesture)
 				u.toasts.show(toastSuccess, "Gesture mode on, typing through "+backend+".")
 			})
 		})
@@ -724,8 +784,8 @@ func (u *appUI) setMode(m Mode) {
 		err := u.live.EnterPlain(doc)
 		u.post(func() {
 			u.modeBusy = false
-			u.prefs.SetMode(ModePlain)
 			u.modeChanged(ModePlain)
+			u.prefs.SetMode(ModePlain)
 			if err != nil {
 				u.pad.showModeError(err)
 				u.toasts.show(toastError, "Plain mode, but the plain mapping was not written: "+liveErrMessage(err))

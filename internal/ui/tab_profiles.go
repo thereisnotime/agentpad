@@ -116,7 +116,10 @@ func newProfilesTab(u *appUI) *profilesTab {
 	t.resetBtn = widget.NewButtonWithIcon("Reset", theme.ContentUndoIcon(), t.confirmReset)
 	t.applyBtn = widget.NewButtonWithIcon("Apply to pad", theme.UploadIcon(), t.apply)
 	t.applyBtn.Importance = widget.SuccessImportance
-	buttons := container.NewVBox(container.NewGridWithColumns(2, t.saveBtn, t.resetBtn), t.applyBtn)
+	var share *widget.Button
+	share = widget.NewButtonWithIcon("Share", theme.MailForwardIcon(), func() { t.showShareMenu(share) })
+	share.Importance = widget.LowImportance
+	buttons := container.NewVBox(container.NewGridWithColumns(2, t.saveBtn, t.resetBtn), t.applyBtn, share)
 
 	inspector := surface(container.NewVBox(
 		tight(t.inspTitle, t.inspSub),
@@ -143,10 +146,45 @@ func newProfilesTab(u *appUI) *profilesTab {
 
 // reload re-reads profiles from the store, keeping the selection by name.
 func (t *profilesTab) reload(keep string) {
+	idx, ok := t.relist(keep)
+	if !ok {
+		return
+	}
+	if len(t.profiles) == 0 {
+		t.selected = -1
+		return
+	}
+	t.selectProfile(idx)
+}
+
+// externalReload picks up profile files changed outside the app. Unsaved
+// edits in the editor are kept; only the chips are refreshed then. UI goroutine.
+func (t *profilesTab) externalReload() {
+	if t.selected < 0 || reflect.DeepEqual(t.draft, t.stored) {
+		keep := ""
+		if t.selected >= 0 {
+			keep = t.stored.Name
+		}
+		t.reload(keep)
+		return
+	}
+	if idx, ok := t.relist(t.stored.Name); ok && idx < len(t.profiles) {
+		t.selected = idx
+		for j, o := range t.chips.Objects {
+			o.(*chip).setSelected(j == idx)
+		}
+	}
+	t.u.toasts.show(toastInfo, "Profiles changed on disk. Save or reset "+t.draft.Name+" to see its file version.")
+}
+
+// relist reloads the profile list and chips and returns the index of keep
+// (0 when missing). ok is false when the store could not be read.
+func (t *profilesTab) relist(keep string) (int, bool) {
+	t.u.profileSig = dirSignature(t.u.deps.ProfilesDir)
 	list, err := t.u.deps.Store.List()
 	if err != nil {
 		t.showError("Could not load profiles: " + err.Error())
-		return
+		return 0, false
 	}
 	t.profiles = list
 	t.chips.Objects = nil
@@ -166,11 +204,7 @@ func (t *profilesTab) reload(keep string) {
 	if t.u.tray != nil {
 		t.u.tray.rebuild()
 	}
-	if len(list) == 0 {
-		t.selected = -1
-		return
-	}
-	t.selectProfile(idx)
+	return idx, true
 }
 
 func (t *profilesTab) selectProfile(i int) {
