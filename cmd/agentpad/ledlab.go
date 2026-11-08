@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/thereisnotime/agentpad/internal/config"
 
 	"github.com/thereisnotime/agentpad/internal/usbraw"
 )
@@ -15,6 +20,7 @@ import (
 //	agentpad led-lab list               show phases and steps
 //	agentpad led-lab run <phase> [-secs N] [-from N]
 //	agentpad led-lab step <phase> <n>   run one step and leave it on
+//	agentpad led-lab notes [phase...]   interactive: set each step, type what you see, Enter for next
 //	agentpad led-raw <hex> [<hex>...]   send raw packets (each padded to 64 bytes)
 
 type labStep struct {
@@ -110,6 +116,8 @@ func runLedLab(args []string) int {
 		fmt.Println("[done] LEDs off (mode 0)")
 		_ = send(wrap8890(ledMode(0)))
 		return 0
+	case "notes":
+		return runLabNotes(send, args[1:])
 	case "step":
 		if len(args) < 3 {
 			fmt.Fprintln(os.Stderr, "usage: agentpad led-lab step <phase> <n>")
@@ -153,6 +161,67 @@ func runLedRaw(args []string) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "led-raw:", err)
 		return 1
+	}
+	return 0
+}
+
+// runLabNotes walks through phases one step at a time. For every step it sets
+// the LEDs, waits for the user to describe what they see (empty = no change,
+// "r" = resend, "q" = quit) and appends the note to a file in the state dir.
+func runLabNotes(send func([][]byte) error, phases []string) int {
+	if len(phases) == 0 {
+		phases = labOrder
+	}
+	all := labPhases()
+	path := filepath.Join(config.StateDir(), "led-lab-notes.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "\n# session %s\n", time.Now().Format(time.RFC3339))
+	in := bufio.NewScanner(os.Stdin)
+	fmt.Printf("LED lab: notes go to %s\n", path)
+	fmt.Println("For each step: look at the pad, type what you see and press Enter.")
+	fmt.Println("Empty line = no visible change · r = resend · q = quit")
+	defer func() {
+		_ = send(wrap8890(ledMode(0)))
+		fmt.Println("LEDs off (mode 0). Notes saved to", path)
+	}()
+	for _, ph := range phases {
+		steps, ok := all[ph]
+		if !ok {
+			fmt.Fprintln(os.Stderr, "unknown phase", ph)
+			return 2
+		}
+		fmt.Printf("\n== %s (%d steps) ==\n", ph, len(steps))
+		for i := 0; i < len(steps); i++ {
+			if err := send(steps[i].msgs); err != nil {
+				fmt.Fprintln(os.Stderr, "send error:", err)
+				_, _ = fmt.Fprintf(f, "%s %d | %s | ERROR %v\n", ph, i, steps[i].label, err)
+				return 1
+			}
+			fmt.Printf("[%s %2d/%d] %s\n  what do you see? > ", ph, i, len(steps)-1, steps[i].label)
+			if !in.Scan() {
+				return 0
+			}
+			note := strings.TrimSpace(in.Text())
+			switch strings.ToLower(note) {
+			case "q":
+				return 0
+			case "r":
+				i--
+				continue
+			case "":
+				note = "(no change)"
+			}
+			_, _ = fmt.Fprintf(f, "%s %d | %s | %s\n", ph, i, steps[i].label, note)
+		}
 	}
 	return 0
 }
