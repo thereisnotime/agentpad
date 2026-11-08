@@ -11,17 +11,26 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-24.04
+    env:
+      TAGS: ""   # force the X11 Fyne backend (just would otherwise auto-detect)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: System deps (Fyne)
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: System deps (Fyne X11 + Wayland)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev
+            gcc pkg-config libgl1-mesa-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev
       - uses: extractions/setup-just@v2
       - run: just lint
       - run: just test
       - run: just build
+      - name: Build (native Wayland backend)
+        run: go build -tags wayland -o /dev/null ./cmd/agentpad
