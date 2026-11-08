@@ -29,6 +29,10 @@ type KeyMapReport struct {
 	// Unmapped controls send nothing a keyboard node reports as a key
 	// (mouse actions, unknown custom codes, empty actions).
 	Unmapped []Control
+	// Expected holds every keycode the profile's actions can produce,
+	// modifiers and sequence keys included. A key outside this set means the
+	// pad holds a different mapping than the profile.
+	Expected map[uint16]bool
 }
 
 // Ambiguous reports whether some controls cannot be observed reliably.
@@ -62,7 +66,21 @@ func PlainKeyMap(p profile.Profile, o profile.Orientation) (KeyMap, KeyMapReport
 		KnobCCW: p.Knob.CCW, KnobPress: p.Knob.Press, KnobCW: p.Knob.CW,
 	}
 	m := KeyMap{}
-	var rep KeyMapReport
+	rep := KeyMapReport{Expected: map[uint16]bool{}}
+	for _, a := range actions {
+		combos, err := vkbd.Translate(a)
+		if err != nil {
+			continue
+		}
+		for _, c := range combos {
+			for _, mod := range c.Mods {
+				rep.Expected[mod] = true
+			}
+			if c.Key != 0 {
+				rep.Expected[c.Key] = true
+			}
+		}
+	}
 	byCode := map[uint16]int{} // code -> index in rep.Collisions, -1 if none yet
 	for _, c := range plainOrder {
 		code, ok := mainKey(actions[c])

@@ -98,10 +98,13 @@ func TestObserver(t *testing.T) {
 			}
 		}
 	}
-	isInput := func(ev ControlEvent) bool { return ev.Status == "" }
+	isInput := func(ev ControlEvent) bool { return ev.Status == "" && !ev.Unmapped }
 	wait(func(ev ControlEvent) bool { return ev.Status == StatusRunning })
 	now := time.Now()
-	a.keys <- rawKey{29, true, now} // ctrl: not mapped, dropped
+	a.keys <- rawKey{29, true, now} // ctrl: not in the key map, delivered as Unmapped
+	if ev := wait(func(ev ControlEvent) bool { return ev.Status == "" }); !ev.Unmapped || ev.Control != "" || ev.Code != 29 {
+		t.Fatalf("unmapped event %+v", ev)
+	}
 	a.keys <- rawKey{28, true, now} // enter = knob press
 	if ev := wait(isInput); ev.Control != KnobPress || !ev.Down || ev.Code != 28 || !ev.Time.Equal(now) {
 		t.Fatalf("event %+v", ev)
@@ -141,5 +144,21 @@ func TestObserverStartError(t *testing.T) {
 	o2 := NewObserver(nil, nil)
 	o2.Stop()
 	for range o2.Events() {
+	}
+}
+
+func TestPlainKeyMapExpectedIncludesModsAndSequences(t *testing.T) {
+	p := profile.Profile{Name: "t", Keys: [3]string{"ctrl-c", "a,b", "escape"}, Knob: profile.Knob{CCW: "up", Press: "enter", CW: "volumeup"}}
+	_, rep, err := PlainKeyMap(p, profile.OrientNormal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []uint16{29, 46, 30, 48, 1, 103, 28, 115} {
+		if !rep.Expected[code] {
+			t.Errorf("code %d should be expected", code)
+		}
+	}
+	if rep.Expected[16] {
+		t.Error("q (16) is not in the profile")
 	}
 }

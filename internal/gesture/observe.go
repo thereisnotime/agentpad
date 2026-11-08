@@ -27,15 +27,18 @@ type ControlEvent struct {
 	Down    bool
 	Time    time.Time
 	Code    uint16 // Linux keycode it came from
-	Status  Status
-	Err     error
+	// Unmapped is set for a key the KeyMap doesn't know (Control is empty):
+	// a modifier or sequence key, or a pad holding a different mapping.
+	Unmapped bool
+	Status   Status
+	Err      error
 }
 
 // Observer streams raw control events from the pad, e.g. to animate the pad
 // drawing. With EvdevObserveSource it works in plain mode without taking
 // keys away from other apps; codes are mapped with the KeyMap (PlainKeyMap
 // for the active profile, GestureKeyMap in gesture mode). Unmapped codes
-// (modifiers of a combo, keys of a sequence) are dropped. While a gesture
+// are delivered with Unmapped set and no Control. While a gesture
 // Engine holds the grab, an observer sees nothing; use Engine.Events (it
 // carries raw inputs too) instead. An Observer runs once.
 type Observer struct {
@@ -143,6 +146,8 @@ func (o *Observer) run(ctx context.Context, src Source) {
 		err := src.Read(ctx, func(code uint16, down bool, t time.Time) {
 			if c, ok := o.lookup(code); ok {
 				o.send(ControlEvent{Control: c, Down: down, Time: t, Code: code})
+			} else {
+				o.send(ControlEvent{Down: down, Time: t, Code: code, Unmapped: true})
 			}
 		})
 		_ = src.Close()

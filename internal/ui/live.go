@@ -61,9 +61,14 @@ type liveCallbacks struct {
 	Status  func(liveStatus)    // status changed
 	// Agentpad handles reserved actions ("agentpad:jump") instead of typing them.
 	Agentpad func(action string)
+	// Unexpected reports a pressed key the active profile cannot produce:
+	// the pad holds a different mapping (plain mode only).
+	Unexpected func(code uint16)
 }
 
 type liveController struct {
+	expected map[uint16]bool // keycodes the active profile can produce (guarded by mu)
+
 	dev    LiveDevices
 	upload func(doc []byte) error // synchronous pad upload (through the device worker)
 	cb     liveCallbacks
@@ -127,6 +132,7 @@ func (c *liveController) SetProfile(p profile.Profile, o profile.Orientation) (g
 	if err != nil {
 		return rep, err
 	}
+	c.expected = rep.Expected
 	if c.mode == ModeGesture {
 		c.eng.SetProfile(p)
 		if rotated {
@@ -171,6 +177,12 @@ func (c *liveController) startObserver() error {
 		for ev := range obs.Events() {
 			switch ev.Status {
 			case "":
+				if ev.Unmapped {
+					if ev.Down && c.cb.Unexpected != nil && !c.isExpected(ev.Code) {
+						c.cb.Unexpected(ev.Code)
+					}
+					continue
+				}
 				if c.cb.Input != nil {
 					c.cb.Input(PadInputEvent{Control: string(ev.Control), Down: ev.Down, Time: ev.Time})
 				}
@@ -362,4 +374,12 @@ func liveErrMessage(err error) string {
 		return m
 	}
 	return err.Error()
+}
+
+// isExpected reports whether the active profile can produce code. Before the
+// first SetProfile nothing is known, so every key counts as expected.
+func (c *liveController) isExpected(code uint16) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.expected == nil || c.expected[code]
 }

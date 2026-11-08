@@ -57,6 +57,7 @@ type profilesTab struct {
 	gestureMode bool
 	liveHint    *widget.Label
 	warning     *widget.Label
+	mismatch    string // last "pad holds a different mapping" notice, cleared on apply
 	monitor     *fyne.Container
 	monitorBox  fyne.CanvasObject
 	monLog      gestureLog
@@ -271,18 +272,39 @@ func (t *profilesTab) syncView() {
 	t.showWarning()
 }
 
-// showWarning shows which controls plain-mode live input cannot tell apart.
+// showWarning shows which controls plain-mode live input cannot tell apart,
+// and whether the pad seems to hold a different mapping.
 func (t *profilesTab) showWarning() {
-	w := ""
+	var parts []string
 	if !t.gestureMode {
-		w = collisionWarning(t.draft, t.orient)
+		if t.mismatch != "" {
+			parts = append(parts, t.mismatch)
+		}
+		if w := collisionWarning(t.draft, t.orient); w != "" {
+			parts = append(parts, w+".")
+		}
 	}
-	if w == "" {
+	if len(parts) == 0 {
 		t.warning.Hide()
 		return
 	}
-	t.warning.SetText(w + ".")
+	t.warning.SetText(strings.Join(parts, "\n"))
 	t.warning.Show()
+}
+
+// showMismatch notes that the pad sent a key the active profile never sends.
+// UI goroutine.
+func (t *profilesTab) showMismatch(key string) {
+	t.mismatch = mismatchText(key, t.u.prefs.ActiveProfile())
+	t.showWarning()
+}
+
+// clearMismatch drops the notice after the pad was programmed. UI goroutine.
+func (t *profilesTab) clearMismatch() {
+	if t.mismatch != "" {
+		t.mismatch = ""
+		t.showWarning()
+	}
 }
 
 const liveOffHint = "Live input is off. Enable live input (needs input permission) to see presses here."

@@ -23,6 +23,7 @@ import (
 	"github.com/thereisnotime/agentpad/internal/notify"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/vkbd"
 )
 
 const (
@@ -201,6 +202,9 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 		Gesture:  u.onGesture,
 		Status:   func(st liveStatus) { u.post(func() { u.showLiveStatus(st) }) },
 		Agentpad: func(a string) { u.post(func() { u.onAgentpadAction(a) }) },
+		Unexpected: func(code uint16) {
+			u.post(func() { u.profiles.showMismatch(vkbd.KeyName(code)) })
+		},
 	})
 	u.liveJobs = make(chan func(), liveQueue)
 	u.liveQuit = make(chan struct{})
@@ -489,6 +493,7 @@ func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func
 				u.prefs.SetActiveProfile(p.Name)
 				u.tray.rebuild()
 				u.setLiveProfile(p)
+				u.profiles.clearMismatch()
 			}
 			done(names, err)
 		})

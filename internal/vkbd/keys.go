@@ -233,3 +233,32 @@ func AllCodes() []uint16 {
 	}
 	return out
 }
+
+// KeyName returns a short human name for a Linux keycode ("A", "Enter",
+// "Ctrl", "VolumeUp"), or "keycode N" when unknown.
+func KeyName(code uint16) string {
+	special := map[uint16]string{1: "Esc", 28: "Enter", 57: "Space", 14: "Backspace", 15: "Tab",
+		103: "Up", 108: "Down", 105: "Left", 106: "Right"}
+	if n, ok := special[code]; ok {
+		return n
+	}
+	best := ""
+	consider := func(name string, c uint16) {
+		if c == code && (best == "" || len(name) < len(best) || (len(name) == len(best) && name < best)) {
+			best = name
+		}
+	}
+	for n, k := range keys {
+		consider(n, k.linux)
+	}
+	for n, c := range modifiers {
+		consider(n, c)
+	}
+	for n, c := range media {
+		consider(n, c)
+	}
+	if best == "" {
+		return fmt.Sprintf("keycode %d", code)
+	}
+	return strings.ToUpper(best[:1]) + best[1:]
+}

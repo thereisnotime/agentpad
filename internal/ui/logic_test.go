@@ -133,3 +133,12 @@ func TestPlural(t *testing.T) {
 		t.Error("plural")
 	}
 }
+
+func TestMismatchText(t *testing.T) {
+	if got := mismatchText("A", "claude-code"); !strings.Contains(got, "A") || !strings.Contains(got, "Apply claude-code to pad") {
+		t.Fatalf("mismatchText = %q", got)
+	}
+	if got := mismatchText("A", ""); !strings.Contains(got, "Apply a profile") {
+		t.Fatalf("mismatchText without active = %q", got)
+	}
+}

@@ -215,3 +215,11 @@ func plural(n int, word string) string {
 	}
 	return fmt.Sprintf("%d %ss", n, word)
 }
+
+// mismatchText explains a key the active profile can't produce.
+func mismatchText(key, active string) string {
+	if active == "" {
+		return "The pad sent " + key + ", which agentpad doesn't expect: it doesn't know what's on the pad yet. Apply a profile to pad so live input matches."
+	}
+	return "The pad sent " + key + ", which " + active + " never sends: the pad holds a different mapping, so presses may show on the wrong control. Apply " + active + " to pad to sync."
+}
