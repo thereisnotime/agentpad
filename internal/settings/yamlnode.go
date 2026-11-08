@@ -252,14 +252,14 @@ var keyComments = map[string]string{
 		"  plain (the pad types the keys itself) | gesture (agentpad reads the pad: tap, hold, double-tap, chords)",
 	"led":               "LEDs.",
 	"led.follow_agents": "Switch the LEDs when an agent needs attention: true | false",
-	"led.8890": "0x8890 boards: built-in effects by index, no colours.\n" +
+	"led.8890": "0x8890 boards: three built-in modes, no colours.\n" +
 		"  attention = while an agent waits for you, normal = the rest of the time.\n" +
-		"  Format: {mode: 0-5} (0 = off, 1-5 = built-in effects)",
+		"  Format: {mode: 0-2} (0 = off, 1 = key glow, 2 = rainbow chase)",
 	"led.884x": "0x8840/0x8842 boards: named effects with colours, set per layer.\n" +
 		"  Format: {layer: 0-2, effect: off | backlight | shock | shock2 | press, color: COLOR}\n" +
 		"  COLOR: red | orange | yellow | green | cyan | blue | purple (white for backlight only);\n" +
 		"  leave color out for effect off.",
-	"led.labels": "Your names for the 0x8890 effects shown in the UI, keyed by mode index 0-5,\n" +
+	"led.labels": "Your names for the 0x8890 effects shown in the UI, keyed by mode index 0-2,\n" +
 		"  e.g. labels: {\"1\": Steady, \"2\": Breathing}",
 	"gestures":                 "Gesture mode timing, in milliseconds.",
 	"gestures.hold_ms":         "Press at least this long to count as a hold: 100-5000",
