@@ -22,9 +22,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev
       - uses: extractions/setup-just@v2
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.12.2
+      - run: just lint
       - run: just test
       - run: just build

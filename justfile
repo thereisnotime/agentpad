@@ -73,15 +73,15 @@ cover:
 # Format Go code
 [group('quality')]
 fmt:
-    gofmt -s -w .
+    git ls-files -z "*.go" | xargs -0 gofmt -s -w
     @printf "{{ c_green }}✔ formatted{{ c_reset }}\n"
 
-# Lint (golangci-lint if installed, else go vet)
+# Lint with the pinned golangci-lint (tools/go.mod)
 [group('quality')]
 lint:
     @printf "{{ c_blue }}▸ lint{{ c_reset }}\n"
-    @test -z "$(gofmt -s -l .)" || { printf "{{ c_red }}✘ gofmt needed:{{ c_reset }}\n"; gofmt -s -l .; exit 1; }
-    @if command -v golangci-lint >/dev/null && golangci-lint version >/dev/null 2>&1; then golangci-lint run --build-tags "{{ tags }}" ./...; else printf "{{ c_yellow }}! golangci-lint missing, using go vet{{ c_reset }}\n"; go vet -tags "{{ tags }}" ./...; fi
+    @test -z "$(git ls-files -z "*.go" | xargs -0 gofmt -s -l)" || { printf "{{ c_red }}✘ gofmt needed:{{ c_reset }}\n"; git ls-files -z "*.go" | xargs -0 gofmt -s -l; exit 1; }
+    go tool -modfile=tools/go.mod golangci-lint run --build-tags "{{ tags }}" ./...
     @printf "{{ c_green }}✔ lint ok{{ c_reset }}\n"
 
 # Tidy go.mod / go.sum
