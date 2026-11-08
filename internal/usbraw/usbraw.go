@@ -132,7 +132,7 @@ func Send(path string, iface int, endpoint uint8, msgs [][]byte) (err error) {
 		}
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fd := f.Fd()
 
 	// Detach the kernel driver (if any) from the command interface; ENODATA
