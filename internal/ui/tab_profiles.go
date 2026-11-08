@@ -61,7 +61,13 @@ type profilesTab struct {
 	monitor     *fyne.Container
 	monitorBox  fyne.CanvasObject
 	monLog      gestureLog
+
+	chords *collapsible // gesture mode: the three chord slots
+	picks  *collapsible // quick picks
 }
+
+// monitorLines is how many lines the Recognised card shows before scrolling.
+const monitorLines = 8
 
 func newProfilesTab(u *appUI) *profilesTab {
 	t := &profilesTab{u: u, selected: -1, entries: map[string]*widget.SelectEntry{}}
@@ -94,11 +100,14 @@ func newProfilesTab(u *appUI) *profilesTab {
 	t.warning.Importance = widget.WarningImportance
 	t.warning.Hide()
 	t.monitor = container.NewVBox()
-	t.monitorBox = container.NewVBox(text("Recognised", 12, colText2, true), t.monitor)
+	monScroll := container.NewVScroll(t.monitor)
+	monScroll.SetMinSize(fyne.NewSize(0, monitorLines*18))
+	t.monitorBox = surface(container.NewVBox(boldLabel("Recognised"), monScroll))
 	t.monitorBox.Hide()
 	live := container.NewVBox(container.NewCenter(t.caption), t.liveHint)
-	stage := surface(container.NewBorder(stageHead, container.NewVBox(live, t.monitorBox, rotate, t.warning, secondary(layersNote)), nil, nil,
-		inset(8, 8, 0, 0, t.view.content)))
+	// natural heights, top to bottom: drawing, rotate row, notes
+	stage := surface(container.NewVBox(stageHead, inset(8, 0, 0, 0, t.view.content), live, rotate, t.warning, secondary(layersNote)))
+	left := container.NewVBox(stage, t.monitorBox)
 
 	t.inspTitle = boldLabel("")
 	t.inspSub = secondary("")
@@ -108,6 +117,8 @@ func newProfilesTab(u *appUI) *profilesTab {
 		a := a
 		picks.Add(newChip(a, true, func() { t.quickPick(a) }))
 	}
+	t.picks = newCollapsible("Quick picks", true, picks)
+	t.chords = newCollapsible(sectionChords, false)
 	t.message = wrapLabel("")
 	t.message.Hide()
 
@@ -121,20 +132,16 @@ func newProfilesTab(u *appUI) *profilesTab {
 	share.Importance = widget.LowImportance
 	buttons := container.NewVBox(container.NewGridWithColumns(2, t.saveBtn, t.resetBtn), t.applyBtn, share)
 
-	inspector := surface(container.NewVBox(
-		tight(t.inspTitle, t.inspSub),
-		t.slotsBox,
-		text("Quick picks", 12, colText2, true),
-		picks,
-		t.message,
-		widget.NewSeparator(),
-		buttons,
-	))
+	// the slots scroll inside the inspector when taller than the window;
+	// title and buttons stay put
+	slots := cappedScroll(container.NewVBox(t.slotsBox, t.picks.content, t.message), t.inspectorLimit)
+	inspector := surface(container.NewBorder(tight(t.inspTitle, t.inspSub),
+		container.NewVBox(widget.NewSeparator(), buttons), nil, nil, slots))
 
 	body := container.NewVBox(
 		screenTitle("Profiles", "Pick a profile, click a key or the knob, choose what it sends."),
 		t.chips,
-		newTwoPane(stage, container.NewVBox(inspector)),
+		newTwoPane(left, inspector),
 	)
 	t.content = screen(body)
 
@@ -247,10 +254,17 @@ func (t *profilesTab) loadInspector() {
 	t.slotsBox.Objects = nil
 	clear(t.entries)
 	slots := slotsFor(t.control, t.draft, t.gestureMode)
+	var grid *fyne.Container
+	var chords []fyne.CanvasObject
+	inChords := false
 	for _, s := range slots {
 		s := s
-		if s.Section != "" {
+		if s.Section == sectionChords {
+			inChords = true
+		} else if s.Section != "" {
 			t.slotsBox.Add(inset(6, 0, 0, 0, text(s.Section, 13, colText, true)))
+			grid = container.New(&columnsLayout{cols: t.slotColumns, gap: 8})
+			t.slotsBox.Add(grid)
 		}
 		opts := profile.SupportedKeys()
 		if s.ID != slotAction {
@@ -266,7 +280,19 @@ func (t *profilesTab) loadInspector() {
 			}
 		}
 		t.entries[s.ID] = e
-		t.slotsBox.Add(container.NewVBox(text(s.Label, 12, colText2, true), e))
+		cell := container.NewVBox(text(s.Label, 12, colText2, true), e)
+		switch {
+		case inChords:
+			chords = append(chords, cell)
+		case grid != nil:
+			grid.Add(cell)
+		default:
+			t.slotsBox.Add(cell)
+		}
+	}
+	if len(chords) > 0 {
+		t.chords.setBody(chords...)
+		t.slotsBox.Add(t.chords.content)
 	}
 	t.activeSlot = slots[0].ID
 	t.slotsBox.Refresh()
@@ -355,6 +381,7 @@ func (t *profilesTab) setMode(m Mode) {
 	} else {
 		t.monitorBox.Hide()
 	}
+	t.picks.setOpen(!on) // the many gesture slots need the room
 	t.loadInspector()
 	t.showWarning()
 }
@@ -559,3 +586,28 @@ func (t *profilesTab) showCaption(s string) {
 		})
 	})
 }
+
+// slotColumns is 2 for the gesture slot grid when the panes sit side by side.
+func (t *profilesTab) slotColumns() int {
+	if t.u.win != nil && sideBySide(t.u.win.Canvas().Size().Width) {
+		return 2
+	}
+	return 1
+}
+
+// inspectorLimit caps the inspector's slot area to what fits in the window
+// next to the pad (0 = no cap when stacked).
+func (t *profilesTab) inspectorLimit() float32 {
+	if t.u.win == nil {
+		return 0
+	}
+	sz := t.u.win.Canvas().Size()
+	if !sideBySide(sz.Width) {
+		return 0
+	}
+	return max(sz.Height-inspectorChrome, 240)
+}
+
+// inspectorChrome is the height above and below the inspector's slot area:
+// header, screen title, chips, inspector title and buttons.
+const inspectorChrome = 470

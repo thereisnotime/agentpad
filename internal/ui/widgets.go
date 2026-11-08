@@ -102,7 +102,8 @@ func (l *gridLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 	}
 }
 
-// twoPaneLayout puts [main, side] side by side when wide enough, else stacks them.
+// twoPaneLayout puts [main, side] side by side when wide enough, else stacks
+// them. Both panes keep their own height (top aligned, no stretching).
 type twoPaneLayout struct {
 	side, gap float32
 	lastW     float32
@@ -126,16 +127,129 @@ func (l *twoPaneLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 	if sideBySide(size.Width) {
 		sw := min(l.side, size.Width/2)
 		main.Move(fyne.NewPos(0, 0))
-		main.Resize(fyne.NewSize(size.Width-sw-l.gap, size.Height))
+		main.Resize(fyne.NewSize(size.Width-sw-l.gap, main.MinSize().Height))
 		side.Move(fyne.NewPos(size.Width-sw, 0))
-		side.Resize(fyne.NewSize(sw, max(size.Height, side.MinSize().Height)))
+		side.Resize(fyne.NewSize(sw, side.MinSize().Height))
 		return
 	}
 	mh := main.MinSize().Height
 	main.Move(fyne.NewPos(0, 0))
 	main.Resize(fyne.NewSize(size.Width, mh))
 	side.Move(fyne.NewPos(0, mh+l.gap))
-	side.Resize(fyne.NewSize(size.Width, max(size.Height-mh-l.gap, side.MinSize().Height)))
+	side.Resize(fyne.NewSize(size.Width, side.MinSize().Height))
+}
+
+// columnsLayout lays its children out in cols() equal columns, row by row.
+type columnsLayout struct {
+	cols func() int
+	gap  float32
+}
+
+func (l *columnsLayout) n(objs []fyne.CanvasObject) int { return max(1, min(l.cols(), len(objs))) }
+
+func (l *columnsLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	cols := l.n(objs)
+	var w, h, rowH float32
+	for i, o := range objs {
+		m := o.MinSize()
+		w = max(w, m.Width)
+		rowH = max(rowH, m.Height)
+		if i%cols == cols-1 || i == len(objs)-1 {
+			if h > 0 {
+				h += l.gap
+			}
+			h += rowH
+			rowH = 0
+		}
+	}
+	return fyne.NewSize(w*float32(cols)+l.gap*float32(cols-1), h)
+}
+
+func (l *columnsLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	cols := l.n(objs)
+	cw := (size.Width - l.gap*float32(cols-1)) / float32(cols)
+	var y float32
+	for r := 0; r*cols < len(objs); r++ {
+		row := objs[r*cols : min(len(objs), (r+1)*cols)]
+		var rh float32
+		for _, o := range row {
+			rh = max(rh, o.MinSize().Height)
+		}
+		for c, o := range row {
+			o.Move(fyne.NewPos(float32(c)*(cw+l.gap), y))
+			o.Resize(fyne.NewSize(cw, rh))
+		}
+		y += rh + l.gap
+	}
+}
+
+// cappedLayout sizes a single scroll to its content, but no taller than
+// limit() (0 = no limit), so it scrolls inside itself beyond that.
+type cappedLayout struct {
+	scroll *container.Scroll
+	limit  func() float32
+}
+
+func (l *cappedLayout) MinSize([]fyne.CanvasObject) fyne.Size {
+	c := l.scroll.Content.MinSize()
+	h := c.Height
+	if m := l.limit(); m > 0 && h > m {
+		h = m
+	}
+	return fyne.NewSize(c.Width, h)
+}
+
+func (l *cappedLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	for _, o := range objs {
+		o.Move(fyne.NewPos(0, 0))
+		o.Resize(size)
+	}
+}
+
+func cappedScroll(content fyne.CanvasObject, limit func() float32) *fyne.Container {
+	s := container.NewVScroll(content)
+	return container.New(&cappedLayout{scroll: s, limit: limit}, s)
+}
+
+// collapsible is a section with a header that shows or hides its body.
+type collapsible struct {
+	title   string
+	open    bool
+	head    *widget.Button
+	body    *fyne.Container
+	content *fyne.Container
+}
+
+func newCollapsible(title string, open bool, body ...fyne.CanvasObject) *collapsible {
+	c := &collapsible{title: title, body: container.NewVBox(body...)}
+	c.head = widget.NewButton(title, func() { c.setOpen(!c.open) })
+	c.head.Alignment = widget.ButtonAlignLeading
+	c.head.Importance = widget.LowImportance
+	c.content = container.NewVBox(c.head, c.body)
+	c.open = !open
+	c.setOpen(open)
+	return c
+}
+
+func (c *collapsible) setOpen(on bool) {
+	if c.open == on {
+		return
+	}
+	c.open = on
+	if on {
+		c.head.SetIcon(theme.MenuDropDownIcon())
+		c.body.Show()
+	} else {
+		c.head.SetIcon(theme.NavigateNextIcon())
+		c.body.Hide()
+	}
+	c.content.Refresh()
+}
+
+// setBody replaces the body's children.
+func (c *collapsible) setBody(objs ...fyne.CanvasObject) {
+	c.body.Objects = objs
+	c.body.Refresh()
 }
 
 // ---- text helpers ------------------------------------------------------------

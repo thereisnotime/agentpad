@@ -132,7 +132,7 @@ func slotsFor(c controlID, p profile.Profile, gestures bool) []actionSlot {
 	for i, kind := range profile.GestureKinds(c.name()) {
 		s := actionSlot{ID: gestureSlotID(c.name(), kind), Label: kindLabel(kind), Placeholder: notUsed}
 		if (kind == profile.KindTap || kind == profile.KindRotate) && plain != "" {
-			s.Placeholder = plain + " (plain action)"
+			s.Placeholder = plain + " (plain)"
 		}
 		if i == 0 {
 			s.Section = sectionGestures

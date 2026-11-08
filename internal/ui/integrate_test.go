@@ -549,14 +549,14 @@ func TestGestureSlots(t *testing.T) {
 	if !slices.Equal(labels[1:5], []string{"Tap", "Hold", "Long hold", "Double-tap"}) || labels[5] != "Keys 1 + 2" {
 		t.Errorf("labels %q", labels)
 	}
-	if key[1].Placeholder != "escape (plain action)" || key[2].Placeholder != notUsed || key[1].Section != sectionGestures || key[5].Section != sectionChords {
+	if key[1].Placeholder != "escape (plain)" || key[2].Placeholder != notUsed || key[1].Section != sectionGestures || key[5].Section != sectionChords {
 		t.Errorf("placeholders/sections %+v", key)
 	}
 	if getAction(p, ctlKey3, "g:key3:hold") != "ctrl-c" || getAction(p, ctlKey3, "g:key3:tap") != "" {
 		t.Error("gesture slots show explicit actions only")
 	}
 	knob := slotsFor(ctlKnobCW, p, true)
-	if knob[1].ID != "g:knob-cw:rotate" || knob[1].Label != "Turn" || knob[1].Placeholder != "down (plain action)" ||
+	if knob[1].ID != "g:knob-cw:rotate" || knob[1].Label != "Turn" || knob[1].Placeholder != "down (plain)" ||
 		knob[2].ID != "g:knob-cw:pressrotate" || knob[2].Label != "Press + turn" {
 		t.Errorf("knob slots %+v", knob[:3])
 	}

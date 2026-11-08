@@ -145,9 +145,11 @@ Any other `agentpad:` name is rejected when the profile is saved.
   one slot per gesture for the selected control (tap / hold / long hold /
   double-tap, or turn / press + turn for the knob) plus the three chords. An
   empty slot is not used; tap and turn fall back to the plain action, shown as
-  the placeholder.
-- **Watch it work**: in gesture mode the Profiles screen lists the last
-  recognised gestures, e.g. `key 1 · hold → ctrl-c`.
+  the placeholder. On wide windows the gesture slots sit in a 2×2 grid; **Chords**
+  and **Quick picks** are collapsible (chords start collapsed, quick picks are
+  collapsed in gesture mode).
+- **Watch it work**: in gesture mode a **Recognised** card under the pad lists
+  the last recognised gestures, newest first, e.g. `key 1 · hold → ctrl-c`.
 - Applying a profile in gesture mode switches the profile agentpad uses; the
   pad keeps its gesture mapping.
 - Thresholds (hold, long hold, double-tap) come from the settings; there is no
