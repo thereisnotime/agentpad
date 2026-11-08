@@ -2,9 +2,11 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 
+	"github.com/thereisnotime/agentpad/internal/gesture"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
@@ -33,9 +35,62 @@ type Settings interface {
 	ActiveProfile() string
 	SetActiveProfile(name string)
 
+	// Mode is plain (the pad works on its own) or gesture (agentpad reads
+	// the pad and emits actions per gesture). Default plain.
+	Mode() Mode
+	SetMode(Mode)
+
+	// NotifyAttention shows a desktop notification when a session starts
+	// waiting (default on).
+	NotifyAttention() bool
+	SetNotifyAttention(bool)
+
+	// GestureConfig returns the gesture recogniser thresholds; zero fields
+	// mean the defaults.
+	GestureConfig() GestureTimings
+
 	// OnChange registers f to run (on the UI goroutine) after any change,
 	// including changes made outside the app.
 	OnChange(f func())
+}
+
+// Mode is the input mode.
+type Mode string
+
+// Input modes.
+const (
+	ModePlain   Mode = "plain"
+	ModeGesture Mode = "gesture"
+)
+
+// ParseMode returns the mode for s; anything unknown is plain.
+func ParseMode(s string) Mode {
+	if Mode(s) == ModeGesture {
+		return ModeGesture
+	}
+	return ModePlain
+}
+
+// GestureTimings are the user-tunable gesture thresholds.
+type GestureTimings struct {
+	Hold      time.Duration
+	LongHold  time.Duration
+	DoubleTap time.Duration
+}
+
+// config is the recogniser configuration (defaults for zero fields).
+func (g GestureTimings) config() gesture.Config {
+	c := gesture.DefaultConfig()
+	if g.Hold > 0 {
+		c.Hold = g.Hold
+	}
+	if g.LongHold > 0 {
+		c.LongHold = g.LongHold
+	}
+	if g.DoubleTap > 0 {
+		c.DoubleTap = g.DoubleTap
+	}
+	return c
 }
 
 // fynePrefs implements Settings on fyne.Preferences.
@@ -80,5 +135,15 @@ func (f fynePrefs) SetLEDLabel(n int, label string) {
 
 func (f fynePrefs) ActiveProfile() string        { return f.p.String(prefActiveProfile) }
 func (f fynePrefs) SetActiveProfile(name string) { f.p.SetString(prefActiveProfile, name) }
+
+func (f fynePrefs) Mode() Mode                 { return ParseMode(f.p.String(prefMode)) }
+func (f fynePrefs) SetMode(m Mode)             { f.p.SetString(prefMode, string(ParseMode(string(m)))) }
+func (f fynePrefs) NotifyAttention() bool      { return f.p.BoolWithFallback(prefNotify, true) }
+func (f fynePrefs) SetNotifyAttention(on bool) { f.p.SetBool(prefNotify, on) }
+
+func (f fynePrefs) GestureConfig() GestureTimings {
+	ms := func(k string) time.Duration { return time.Duration(f.p.Int(k)) * time.Millisecond }
+	return GestureTimings{Hold: ms(prefGestureHold), LongHold: ms(prefGestureLongHold), DoubleTap: ms(prefGestureDoubleTap)}
+}
 
 func (f fynePrefs) OnChange(fn func()) { f.p.AddChangeListener(func() { fyne.Do(fn) }) }

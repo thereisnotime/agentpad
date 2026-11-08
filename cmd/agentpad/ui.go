@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 
 	"github.com/thereisnotime/agentpad/internal/config"
@@ -20,8 +24,33 @@ func runUI() {
 		// dev only: replay a demo sequence for the live feedback animations
 		input = ui.NewFakeInput(700 * time.Millisecond)
 	}
-	ui.Run(app.NewWithID(config.AppID), ui.Deps{
-		Input:   input,
+	a := app.NewWithID(config.AppID)
+
+	// SIGINT/SIGTERM quit the app the normal way, so ui.Run's shutdown leaves
+	// gesture mode and puts the plain mapping back on the pad. A second
+	// signal (or a shutdown that hangs) still ends the process.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	finished, watched := make(chan struct{}), make(chan struct{})
+	defer func() {
+		close(finished)
+		<-watched
+		stop()
+	}()
+	go func() {
+		defer close(watched)
+		select {
+		case <-ctx.Done():
+			stop()
+			time.AfterFunc(15*time.Second, func() { os.Exit(130) })
+			fyne.Do(a.Quit)
+		case <-finished:
+		}
+	}()
+
+	ui.Run(a, ui.Deps{
+		Input: input,
+		// dev only: AGENTPAD_LIVE_INPUT=0 never opens the pad's input devices
+		Live:    ui.LiveDevices{Disabled: os.Getenv("AGENTPAD_LIVE_INPUT") == "0"},
 		Writer:  pad.NewToolWriter(),
 		Store:   profile.NewFileStore(filepath.Join(config.ConfigDir(), "profiles")),
 		Bin:     selfPath(),

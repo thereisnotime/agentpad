@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/thereisnotime/agentpad/internal/events"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
@@ -13,6 +15,8 @@ const (
 	trayProfile
 	trayOrientation
 	trayFollow
+	trayMode
+	trayJump
 	trayShow
 	trayQuit
 )
@@ -36,10 +40,13 @@ type trayState struct {
 	Active   string
 	Orient   profile.Orientation
 	Follow   bool
+	Mode     Mode
+	Waiting  int // sessions waiting for the user
 }
 
-// trayModel builds the tray menu: status · jump (placeholder) · separator ·
-// Profile ▸ · Orientation ▸ · LED follows agents · separator · Show window · Quit.
+// trayModel builds the tray menu: status · Jump to waiting agent · separator ·
+// Mode ▸ · Profile ▸ · Orientation ▸ · LED follows agents · separator ·
+// Show window · Quit.
 func trayModel(s trayState) []trayItem {
 	profiles := make([]trayItem, 0, len(s.Profiles))
 	for _, name := range s.Profiles {
@@ -52,11 +59,15 @@ func trayModel(s trayState) []trayItem {
 	for _, o := range profile.Orientations() {
 		orients = append(orients, trayItem{Label: o.Label(), Action: trayOrientation, Arg: string(o), Checked: o == s.Orient})
 	}
+	modes := []trayItem{
+		{Label: "Plain", Action: trayMode, Arg: string(ModePlain), Checked: s.Mode != ModeGesture},
+		{Label: "Gesture", Action: trayMode, Arg: string(ModeGesture), Checked: s.Mode == ModeGesture},
+	}
 	return []trayItem{
 		{Label: trayStatus(s.Agents), Disabled: true},
-		// Placeholder: the jump-to-session backend is built separately.
-		{Label: "Jump to waiting agent", Disabled: true},
+		{Label: jumpLabel(s.Waiting), Action: trayJump, Disabled: s.Waiting == 0},
 		{Separator: true},
+		{Label: "Mode", Children: modes},
 		{Label: "Profile", Children: profiles},
 		{Label: "Orientation", Children: orients},
 		{Label: "LED follows agents", Action: trayFollow, Checked: s.Follow},
@@ -74,4 +85,12 @@ func trayStatus(s events.State) string {
 		return "Agents: working"
 	}
 	return "Agents: idle"
+}
+
+// jumpLabel is the jump action label, with a count when several sessions wait.
+func jumpLabel(waiting int) string {
+	if waiting > 1 {
+		return fmt.Sprintf("Jump to waiting agent (%d)", waiting)
+	}
+	return "Jump to waiting agent"
 }

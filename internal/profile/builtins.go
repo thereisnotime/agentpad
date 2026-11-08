@@ -11,11 +11,13 @@ func Builtins() []Profile {
 			Keys:        [3]string{"1", "2", "escape"},
 			Knob:        nav,
 			// Gesture mode only (docs/gestures.md): hold key 3 to interrupt,
-			// press+rotate the knob to cycle the permission mode.
+			// press+rotate the knob to cycle the permission mode, long-press
+			// the knob to jump to the waiting agent.
 			Gestures: map[string]map[string]string{
-				CtrlKey3:    {KindHold: "ctrl-c"},
-				CtrlKnobCCW: {KindPressRotate: "shift-tab"},
-				CtrlKnobCW:  {KindPressRotate: "shift-tab"},
+				CtrlKey3:      {KindHold: "ctrl-c"},
+				CtrlKnobPress: {KindLongHold: ActionJump},
+				CtrlKnobCCW:   {KindPressRotate: "shift-tab"},
+				CtrlKnobCW:    {KindPressRotate: "shift-tab"},
 			},
 		},
 		{

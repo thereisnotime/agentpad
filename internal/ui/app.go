@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,9 +14,13 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/thereisnotime/agentpad/internal/config"
 	"github.com/thereisnotime/agentpad/internal/events"
+	"github.com/thereisnotime/agentpad/internal/gesture"
+	"github.com/thereisnotime/agentpad/internal/jump"
+	"github.com/thereisnotime/agentpad/internal/notify"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
@@ -24,10 +30,19 @@ const (
 	prefAttentionMode = "led.attentionMode" // pre-v2 8890 attention mode, migrated once
 	prefOrientation   = "orientation"
 	prefActiveProfile = "profile.active"
-	pollInterval      = 2 * time.Second
-	sessionTTL        = 30 * time.Minute
-	logRows           = 200
-	deviceQueue       = 16
+	prefMode          = "mode"
+	prefNotify        = "notify.attention"
+	// gesture thresholds in milliseconds (0 or unset = default)
+	prefGestureHold      = "gesture.holdMs"
+	prefGestureLongHold  = "gesture.longholdMs"
+	prefGestureDoubleTap = "gesture.doubletapMs"
+	pollInterval         = 2 * time.Second
+	sessionTTL           = 30 * time.Minute
+	logRows              = 200
+	deviceQueue          = 16
+	liveQueue            = 64
+	uploadTimeout        = 20 * time.Second
+	jumpTimeout          = 5 * time.Second
 )
 
 // Screen indexes in navigation order.
@@ -52,6 +67,15 @@ type Deps struct {
 	Input PadInput
 	// Settings stores user preferences; nil means Fyne preferences.
 	Settings Settings
+	// Live are the devices for live input and gesture mode; zero fields
+	// mean the real evdev / uinput / ydotool. Ignored parts: when Input is
+	// set, plain-mode live input comes from Input instead.
+	Live LiveDevices
+	// Jumper focuses waiting sessions; nil means jump.New().
+	Jumper JumpBackend
+	// Notifier connects the attention notifications; nil means notify.New.
+	// It is called lazily, off the UI goroutine.
+	Notifier func(onJump func(key string)) (NotifyBackend, error)
 }
 
 type appUI struct {
@@ -73,6 +97,18 @@ type appUI struct {
 	visible    atomic.Bool // window shown (not hidden to the tray)
 	padPresent atomic.Bool
 	policy     atomic.Pointer[LEDPolicy]
+	notifyOn   atomic.Bool
+	started    atomic.Bool // start ran: live input may open the pad
+	// post runs f on the UI goroutine (fyne.Do; tests queue instead).
+	post func(f func())
+
+	live     *liveController
+	liveJobs chan func()
+	liveQuit chan struct{}
+	liveDone chan struct{}
+	notifier *attentionNotifier
+	jumpMu   sync.Mutex
+	lastJump string // key of the session jumped to last
 
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -87,6 +123,9 @@ type appUI struct {
 	nav        [][2]*navItem
 	screens    *fyne.Container
 	current    int
+	jumpBtn    *widget.Button
+	mode       Mode // applied input mode
+	modeBusy   bool // a mode switch is running
 
 	pad      *padTab
 	profiles *profilesTab
@@ -127,12 +166,43 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.deps.Settings = d.Settings
 	u.prefs = d.Settings
 	u.ledFollow.Store(u.prefs.LEDFollow())
+	u.notifyOn.Store(u.prefs.NotifyAttention())
+	u.post = fyne.Do
+	u.mode = ModePlain
+	if d.Jumper == nil {
+		d.Jumper = jump.New()
+	}
+	u.deps.Jumper = d.Jumper
+	if d.Notifier == nil {
+		d.Notifier = func(onJump func(string)) (NotifyBackend, error) {
+			n, err := notify.New(onJump)
+			if err != nil {
+				return nil, err
+			}
+			return n, nil
+		}
+	}
+	u.deps.Notifier = d.Notifier
 
 	u.writer = newDeviceWriter(d.Writer)
 	u.led = pad.NewLEDController(u.writer, pollInterval)
 	u.dev = newDeviceWorker(u.writer, u.led, deviceQueue)
 	u.dev.start()
 	u.tracker = events.NewTracker()
+	live := d.Live
+	if d.Input != nil {
+		live.Disabled = true // the given input replaces the observer
+	}
+	u.live = newLiveController(live, u.uploadSync, liveCallbacks{
+		Input:    u.onLiveInput,
+		Gesture:  u.onGesture,
+		Status:   func(st liveStatus) { u.post(func() { u.showLiveStatus(st) }) },
+		Agentpad: func(a string) { u.post(func() { u.onAgentpadAction(a) }) },
+	})
+	u.liveJobs = make(chan func(), liveQueue)
+	u.liveQuit = make(chan struct{})
+	u.liveDone = make(chan struct{})
+	go u.runLive()
 	u.loadLEDPolicy(u.writer.product())
 
 	u.win = a.NewWindow("agentpad")
@@ -149,6 +219,9 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.pillAgents = newPill(func() { u.navigate(screenSessions) })
 	u.pillRecv = newPill(u.explainReceiver)
 	u.pillRecv.set(colorIdle, "Receiver starting")
+	u.jumpBtn = widget.NewButtonWithIcon("Jump", theme.NavigateNextIcon(), u.jumpNext)
+	u.jumpBtn.Importance = widget.WarningImportance
+	u.jumpBtn.Hide()
 
 	u.pad = newPadTab(u)
 	u.profiles = newProfilesTab(u)
@@ -189,6 +262,11 @@ func (u *appUI) start() {
 		}
 	}
 
+	u.notifier = newAttentionNotifier(func() (NotifyBackend, error) {
+		return u.deps.Notifier(u.jumpToKey)
+	}, u.notifyOn.Load)
+	go u.notifier.run(u.stop)
+
 	u.srv = events.NewServer(u.deps.Addr, u.onEvent)
 	if err := u.srv.Start(); err != nil {
 		u.srv = nil
@@ -203,6 +281,11 @@ func (u *appUI) start() {
 	go u.loop()
 	if u.deps.Input != nil {
 		go u.readInput(u.deps.Input)
+	}
+	u.started.Store(true)
+	u.setLiveProfile(u.activeProfile())
+	if u.prefs.Mode() == ModeGesture {
+		u.setMode(ModeGesture)
 	}
 }
 
@@ -249,9 +332,14 @@ func (u *appUI) loop() {
 			changed := u.tracker.Prune(sessionTTL, now)
 			if changed {
 				u.followLED()
+				u.notifyWaiting()
+			}
+			if st := u.live.Status(); st.Mode == ModePlain && !st.Reading && !u.deps.Live.Disabled {
+				u.tryLive(func() { _ = u.live.EnsureObserver() })
 			}
 			fyne.Do(func() {
 				u.sessions.refresh()
+				u.profiles.refreshMonitor(now)
 				if changed {
 					u.aggregateChanged()
 				}
@@ -304,12 +392,11 @@ func (u *appUI) onEvent(e events.Event) {
 	if changed {
 		u.followLED()
 	}
+	u.notifyWaiting()
 	fyne.Do(func() {
 		u.logView.add(e)
 		u.sessions.refresh()
-		if changed {
-			u.aggregateChanged()
-		}
+		u.aggregateChanged() // also the waiting count, which can change on its own
 	})
 }
 
@@ -385,11 +472,20 @@ func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func
 	for i, l := range layers {
 		names[i] = fmt.Sprintf("%d = %s", i+1, l.Name)
 	}
+	if u.mode == ModeGesture || u.modeBusy {
+		// the pad stays on the gesture mapping; the engine switches profiles
+		u.prefs.SetActiveProfile(p.Name)
+		u.tray.rebuild()
+		u.setLiveProfile(p)
+		done(nil, nil)
+		return
+	}
 	u.dev.Upload(doc, func(err error) {
 		fyne.Do(func() {
 			if err == nil {
 				u.prefs.SetActiveProfile(p.Name)
 				u.tray.rebuild()
+				u.setLiveProfile(p)
 			}
 			done(names, err)
 		})
@@ -429,7 +525,7 @@ func (u *appUI) setLEDFollow(on bool) {
 func (u *appUI) aggregateChanged() {
 	s := u.tracker.Aggregate()
 	u.sessions.showAggregate(s)
-	u.tray.show(s)
+	u.tray.show(s, len(u.tracker.Waiting()))
 	u.showAgentsPill(s)
 }
 
@@ -445,6 +541,11 @@ func (u *appUI) showAgentsPill(s events.State) {
 		}
 	}
 	u.pillAgents.setPulsing(s == events.StateAttention)
+	if s == events.StateAttention {
+		u.jumpBtn.Show()
+	} else {
+		u.jumpBtn.Hide()
+	}
 	switch s {
 	case events.StateAttention:
 		u.pillAgents.set(colorAttention, fmt.Sprintf("%d needs you", att))
@@ -465,11 +566,25 @@ func (u *appUI) shutdown() {
 		if u.srv != nil {
 			_ = u.srv.Close()
 		}
+		// Finish the running live job, then leave gesture mode for good: the
+		// plain mapping goes back on the pad before the device worker stops.
+		close(u.liveQuit)
+		<-u.liveDone
+		if err := u.live.Close(u.plainDoc()); err != nil {
+			fmt.Fprintln(os.Stderr, "agentpad: could not restore the plain mapping:", err)
+		}
 		u.dev.Close()
 		u.led.Close()
 		if u.log != nil {
 			_ = u.log.Close()
 		}
+		if u.notifier != nil {
+			select {
+			case <-u.notifier.done:
+			case <-time.After(time.Second):
+			}
+		}
+		_ = u.deps.Jumper.Close()
 	})
 }
 
@@ -477,4 +592,245 @@ func (u *appUI) shutdown() {
 func (u *appUI) quit() {
 	u.shutdown()
 	u.app.Quit()
+}
+
+// runLive runs live-controller jobs one at a time, in order.
+func (u *appUI) runLive() {
+	defer close(u.liveDone)
+	for {
+		select {
+		case <-u.liveQuit:
+			return
+		case f := <-u.liveJobs:
+			f()
+		}
+	}
+}
+
+// liveDo queues f for the live goroutine. Any goroutine.
+func (u *appUI) liveDo(f func()) {
+	select {
+	case u.liveJobs <- f:
+	case <-u.liveQuit:
+	}
+}
+
+// tryLive queues f unless the queue is full (periodic retries). Any goroutine.
+func (u *appUI) tryLive(f func()) {
+	select {
+	case u.liveJobs <- f:
+	default:
+	}
+}
+
+// uploadSync uploads a mapping through the device worker and waits for it.
+// Never call it on the UI goroutine.
+func (u *appUI) uploadSync(doc []byte) error {
+	ch := make(chan error, 1)
+	u.dev.Upload(doc, func(err error) { ch <- err })
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(uploadTimeout):
+		return errors.New("the pad did not answer in time")
+	}
+}
+
+// activeProfile is the profile on the pad: the last applied one, else the
+// first profile. UI goroutine (or after the UI stopped).
+func (u *appUI) activeProfile() profile.Profile {
+	name := u.prefs.ActiveProfile()
+	for _, p := range u.profiles.profiles {
+		if p.Name == name {
+			return p
+		}
+	}
+	if len(u.profiles.profiles) > 0 {
+		return u.profiles.profiles[0]
+	}
+	return profile.Builtins()[0]
+}
+
+// plainDoc renders the plain mapping of the active profile (plus the next
+// two as layers 2 and 3), falling back to the built-ins.
+func (u *appUI) plainDoc() []byte {
+	active := u.activeProfile()
+	all := u.profiles.profiles
+	if len(all) == 0 {
+		all = profile.Builtins()
+	}
+	if doc, err := profile.MappingYAMLOriented(profile.Layers(replaceProfile(all, active), active.Name), u.profiles.orient); err == nil {
+		return doc
+	}
+	doc, _ := profile.MappingYAMLOriented(profile.Layers(profile.Builtins(), ""), profile.OrientNormal)
+	return doc
+}
+
+// setLiveProfile hands p and the orientation to live input / the gesture
+// engine. UI goroutine.
+func (u *appUI) setLiveProfile(p profile.Profile) {
+	o := u.profiles.orient
+	u.liveDo(func() {
+		_, err := u.live.SetProfile(p, o)
+		if u.started.Load() {
+			_ = u.live.EnsureObserver()
+		}
+		if err != nil {
+			u.post(func() { u.toasts.show(toastError, "Gesture mode: "+liveErrMessage(err)) })
+		}
+	})
+}
+
+// setMode switches between plain and gesture mode. UI goroutine.
+func (u *appUI) setMode(m Mode) {
+	if m == u.mode || u.modeBusy {
+		u.pad.showMode(u.mode, u.live.Status())
+		return
+	}
+	u.modeBusy = true
+	u.pad.modeSwitching(m)
+	if m == ModeGesture {
+		cfg := u.prefs.GestureConfig().config()
+		p, o := u.activeProfile(), u.profiles.orient
+		u.liveDo(func() {
+			_, _ = u.live.SetProfile(p, o)
+			backend, err := u.live.EnterGesture(cfg)
+			u.post(func() {
+				u.modeBusy = false
+				if err != nil {
+					u.prefs.SetMode(ModePlain)
+					u.modeChanged(ModePlain)
+					u.pad.showModeError(err)
+					u.toasts.show(toastError, "Gesture mode is off: "+liveErrMessage(err))
+					return
+				}
+				u.prefs.SetMode(ModeGesture)
+				u.modeChanged(ModeGesture)
+				u.toasts.show(toastSuccess, "Gesture mode on, typing through "+backend+".")
+			})
+		})
+		return
+	}
+	doc := u.plainDoc()
+	u.liveDo(func() {
+		err := u.live.EnterPlain(doc)
+		u.post(func() {
+			u.modeBusy = false
+			u.prefs.SetMode(ModePlain)
+			u.modeChanged(ModePlain)
+			if err != nil {
+				u.pad.showModeError(err)
+				u.toasts.show(toastError, "Plain mode, but the plain mapping was not written: "+liveErrMessage(err))
+				return
+			}
+			u.toasts.show(toastSuccess, "Plain mode: the pad works on its own again.")
+		})
+	})
+}
+
+// modeChanged reflects the applied mode everywhere. UI goroutine.
+func (u *appUI) modeChanged(m Mode) {
+	u.mode = m
+	u.pad.showMode(m, u.live.Status())
+	u.profiles.setMode(m)
+	u.tray.rebuild()
+}
+
+// showLiveStatus reflects live input / gesture engine status. UI goroutine.
+func (u *appUI) showLiveStatus(st liveStatus) {
+	u.profiles.showLive(st)
+	if !u.modeBusy {
+		u.pad.showMode(u.mode, st)
+	}
+}
+
+// onLiveInput animates the pad drawing. Reader goroutine.
+func (u *appUI) onLiveInput(ev PadInputEvent) {
+	if !u.visible.Load() {
+		return
+	}
+	u.post(func() { u.profiles.feedback(ev) })
+}
+
+// onGesture adds a recognised gesture to the monitor. Engine goroutine.
+func (u *appUI) onGesture(ev gesture.Event) {
+	it := gestureLine(ev)
+	u.post(func() { u.profiles.monitorAdd(it) })
+}
+
+// onAgentpadAction runs a reserved action from gesture mode. UI goroutine.
+func (u *appUI) onAgentpadAction(a string) {
+	switch a {
+	case profile.ActionJump:
+		u.jumpNext()
+	case profile.ActionNextProfile:
+		u.nextProfile()
+	}
+}
+
+// nextProfile activates the profile after the active one. UI goroutine.
+func (u *appUI) nextProfile() {
+	list := u.profiles.profiles
+	if len(list) == 0 {
+		return
+	}
+	cur := u.activeProfile().Name
+	for i, p := range list {
+		if p.Name == cur {
+			u.activateProfile(list[(i+1)%len(list)].Name)
+			return
+		}
+	}
+	u.activateProfile(list[0].Name)
+}
+
+// notifyWaiting hands the waiting sessions to the notifier. Any goroutine.
+func (u *appUI) notifyWaiting() {
+	if u.notifier != nil {
+		u.notifier.update(u.tracker.Waiting())
+	}
+}
+
+// setNotifyAttention persists the notifications toggle. UI goroutine.
+func (u *appUI) setNotifyAttention(on bool) {
+	u.notifyOn.Store(on)
+	u.prefs.SetNotifyAttention(on)
+	u.notifyWaiting()
+}
+
+// jumpNext jumps to the next waiting session, cycling oldest first. UI goroutine.
+func (u *appUI) jumpNext() {
+	u.jumpMu.Lock()
+	last := u.lastJump
+	u.jumpMu.Unlock()
+	s, ok := u.tracker.NextWaiting(last)
+	if !ok {
+		u.toasts.show(toastInfo, "No agent is waiting for you.")
+		return
+	}
+	u.jumpSession(s)
+}
+
+// jumpToKey jumps to the session with key (notification button). Any goroutine.
+func (u *appUI) jumpToKey(key string) {
+	for _, s := range u.tracker.Sessions() {
+		if s.Key() == key {
+			u.jumpSession(s)
+			return
+		}
+	}
+}
+
+// jumpSession focuses s off the UI goroutine and toasts the result. Any goroutine.
+func (u *appUI) jumpSession(s events.Session) {
+	u.jumpMu.Lock()
+	u.lastJump = s.Key()
+	u.jumpMu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), jumpTimeout)
+		defer cancel()
+		rep := u.deps.Jumper.Jump(ctx, s)
+		kind, msg := jumpToast(s, rep)
+		u.post(func() { u.toasts.show(kind, msg) })
+	}()
 }

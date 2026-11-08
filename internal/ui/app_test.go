@@ -23,6 +23,11 @@ func newTestUI(t *testing.T) *appUI {
 		Version: "test",
 		LogPath: filepath.Join(dir, "events.jsonl"),
 		Addr:    "127.0.0.1:0",
+		Live:    noLive(),
+		Jumper:  &fakeJumper{},
+		Notifier: func(func(string)) (NotifyBackend, error) {
+			return &fakeNotifier{}, nil
+		},
 	})
 	u.ledFollow.Store(false) // no device writes in tests
 	t.Cleanup(u.shutdown)

@@ -65,7 +65,7 @@ func newSessionsTab(u *appUI) *sessionsTab {
 func (t *sessionsTab) refresh() {
 	t.sessions = t.u.tracker.Sessions()
 	for len(t.cards) < len(t.sessions) {
-		c := newSessionCard()
+		c := newSessionCard(t.u.jumpToKey)
 		t.cards = append(t.cards, c)
 		t.list.Add(c.content)
 	}
@@ -125,9 +125,11 @@ type sessionCard struct {
 	state    *canvas.Text
 	cwd      *widget.Label
 	detail   *widget.Label
+	jumpBtn  *widget.Button
+	key      string
 }
 
-func newSessionCard() *sessionCard {
+func newSessionCard(onJump func(key string)) *sessionCard {
 	c := &sessionCard{
 		badgeBG: canvas.NewCircle(colorIdle), letter: text("", 16, colText, true),
 		agent: text("", 15, colText, true), stateDot: canvas.NewCircle(colorIdle), state: text("", 12, colText2, false),
@@ -138,15 +140,28 @@ func newSessionCard() *sessionCard {
 	c.detail = widget.NewLabel("")
 	c.detail.Importance = widget.LowImportance
 	c.detail.Truncation = fyne.TextTruncateEllipsis
+	c.jumpBtn = widget.NewButtonWithIcon("Jump", theme.NavigateNextIcon(), func() {
+		if c.key != "" {
+			onJump(c.key)
+		}
+	})
+	c.jumpBtn.Importance = widget.WarningImportance
+	c.jumpBtn.Hide()
 	badge := fixed(40, 40, c.badgeBG, container.NewCenter(c.letter))
 	stateRow := container.NewHBox(vcenter(fixed(9, 9, c.stateDot)), vcenter(c.state))
 	head := container.NewBorder(nil, nil, nil, stateRow, inset(0, 0, 10, 0, c.agent))
-	c.content = surface(container.NewBorder(nil, nil, vcenter(badge), nil,
+	c.content = surface(container.NewBorder(nil, nil, vcenter(badge), vcenter(c.jumpBtn),
 		inset(0, 0, 6, 0, tight(head, c.cwd, c.detail))))
 	return c
 }
 
 func (c *sessionCard) show(s events.Session, home string, now time.Time) {
+	c.key = s.Key()
+	if s.State == events.StateAttention {
+		c.jumpBtn.Show()
+	} else {
+		c.jumpBtn.Hide()
+	}
 	letter, col := agentBadge(s.Agent)
 	c.badgeBG.FillColor = col
 	c.letter.Text = letter

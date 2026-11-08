@@ -32,6 +32,11 @@ type padTab struct {
 	toolTitle *widget.Label
 	toolHint  *widget.Label
 
+	modeRadio   *widget.RadioGroup
+	modeStatus  *widget.Label
+	modeSyncing bool
+	notifyCheck *widget.Check
+
 	ledHolder *fyne.Container
 	ledFamily string
 	led       *ledPanel
@@ -63,6 +68,41 @@ func newPadTab(u *appUI) *padTab {
 		t.toolHint,
 	))
 
+	t.modeRadio = widget.NewRadioGroup([]string{modeLabelPlain, modeLabelGesture}, func(v string) {
+		if t.modeSyncing || v == "" {
+			return
+		}
+		m := ModePlain
+		if v == modeLabelGesture {
+			m = ModeGesture
+		}
+		u.setMode(m)
+	})
+	t.modeRadio.Horizontal = true
+	t.modeRadio.Required = true
+	t.modeSyncing = true
+	t.modeRadio.SetSelected(modeLabelPlain)
+	t.modeSyncing = false
+	t.modeStatus = wrapLabel("")
+	t.modeStatus.Importance = widget.LowImportance
+	t.notifyCheck = widget.NewCheck("Notify me when an agent waits (with a Jump button)", func(on bool) {
+		if !t.modeSyncing {
+			u.setNotifyAttention(on)
+		}
+	})
+	t.modeSyncing = true
+	t.notifyCheck.SetChecked(u.prefs.NotifyAttention())
+	t.modeSyncing = false
+	modeBadge, _, _ := statusIcon(theme.MediaPlayIcon(), colAccent)
+	modeCard := surface(container.NewVBox(
+		container.NewBorder(nil, nil, vcenter(modeBadge), nil,
+			tight(boldLabel("Input mode"), secondary(modeHint))),
+		t.modeRadio,
+		t.modeStatus,
+		widget.NewSeparator(),
+		t.notifyCheck,
+	))
+
 	t.status = secondary("")
 	t.status.Hide()
 	t.ledHolder = container.NewStack()
@@ -71,6 +111,7 @@ func newPadTab(u *appUI) *padTab {
 	body := container.NewVBox(
 		screenTitle("Pad", "Connection, backend and lighting"),
 		newGrid(320, conn, backend),
+		modeCard,
 		t.ledHolder,
 		t.status,
 	)
@@ -142,6 +183,59 @@ func (t *padTab) checkTool() {
 			t.toolHint.Hide()
 		})
 	}()
+}
+
+const (
+	modeLabelPlain   = "Plain"
+	modeLabelGesture = "Gesture"
+	modeHint         = "Plain: the pad sends its keys on its own. Gesture: agentpad reads the pad and adds hold, " +
+		"long hold, double-tap, chords and press + turn, only while agentpad runs."
+)
+
+// showMode reflects the applied mode and live input status. UI goroutine.
+func (t *padTab) showMode(m Mode, st liveStatus) {
+	t.modeSyncing = true
+	if m == ModeGesture {
+		t.modeRadio.SetSelected(modeLabelGesture)
+	} else {
+		t.modeRadio.SetSelected(modeLabelPlain)
+	}
+	t.modeSyncing = false
+	t.modeRadio.Enable()
+	t.modeStatus.Importance = widget.LowImportance
+	t.modeStatus.SetText(modeStatusText(m, st))
+}
+
+// modeStatusText is the status line under the mode switch.
+func modeStatusText(m Mode, st liveStatus) string {
+	switch {
+	case m == ModeGesture && st.Err != nil:
+		return "Gesture mode is on, but: " + liveErrMessage(st.Err)
+	case m == ModeGesture:
+		return "Gesture mode is on, typing through " + st.Backend + ". Quitting agentpad puts the plain mapping back on the pad."
+	case st.Reading:
+		return "Live input is on: presses light up the pad on the Profiles screen."
+	case st.Err != nil:
+		return "Live input is off. " + liveErrMessage(st.Err)
+	}
+	return "Live input is off."
+}
+
+// modeSwitching shows that a mode switch is running. UI goroutine.
+func (t *padTab) modeSwitching(m Mode) {
+	t.modeRadio.Disable()
+	t.modeStatus.Importance = widget.LowImportance
+	if m == ModeGesture {
+		t.modeStatus.SetText("Switching to gesture mode…")
+	} else {
+		t.modeStatus.SetText("Switching to plain mode and writing the plain mapping…")
+	}
+}
+
+// showModeError explains a failed mode switch. UI goroutine.
+func (t *padTab) showModeError(err error) {
+	t.modeStatus.Importance = widget.DangerImportance
+	t.modeStatus.SetText(liveErrMessage(err))
 }
 
 func (t *padTab) setStatus(s string) {

@@ -23,6 +23,7 @@ func TestValidateGestures(t *testing.T) {
 		{"knob-press": {"hold": "mute", "doubletap": "play"}},
 		{"knob-cw": {"rotate": "volumeup", "pressrotate": "shift-tab"}, "knob-ccw": {"pressrotate": "ctrl-shift-tab"}},
 		{"key1+key3": {"chord": "ctrl-c"}, "key2+key3": {"chord": "<110>"}},
+		{"knob-press": {"longhold": "agentpad:jump"}, "key1+key2": {"chord": "agentpad:next-profile"}},
 	}
 	for _, g := range ok {
 		if err := Validate(gp(g)); err != nil {
@@ -43,6 +44,8 @@ func TestValidateGestures(t *testing.T) {
 		{map[string]map[string]string{"key2": {"hold": ""}}, "gesture key2 hold: empty action"},
 		{map[string]map[string]string{"key2": {"hold": "click"}}, "not supported in gesture mode"},
 		{map[string]map[string]string{"key2": {"hold": "ctrl-wheel(5)"}}, "not supported in gesture mode"},
+		{map[string]map[string]string{"key2": {"hold": "agentpad:nope"}}, `unknown agentpad action "agentpad:nope"`},
+		{map[string]map[string]string{"key2": {"hold": "agentpad:jump,a"}}, "unknown agentpad action"},
 	}
 	for _, tt := range bad {
 		err := Validate(gp(tt.g))
@@ -52,6 +55,20 @@ func TestValidateGestures(t *testing.T) {
 	}
 	if err := Validate(gp(map[string]map[string]string{"key2": {"hold": "rclick"}})); !errors.Is(err, ErrMouseInGesture) {
 		t.Errorf("mouse: %v", err)
+	}
+}
+
+func TestAgentpadActionsOnlyInGestures(t *testing.T) {
+	p := gp(nil)
+	p.Keys[0] = ActionJump
+	if Validate(p) == nil {
+		t.Error("agentpad actions cannot be programmed into the pad")
+	}
+	if !IsAgentpadAction("agentpad:jump") || !IsAgentpadAction("agentpad:next-profile") || IsAgentpadAction("agentpad:") {
+		t.Error("IsAgentpadAction")
+	}
+	if err := Validate(Builtins()[0]); err != nil {
+		t.Errorf("claude-code: %v", err)
 	}
 }
 
@@ -87,6 +104,7 @@ func TestGestureAction(t *testing.T) {
 		{"knob-cw", "rotate", "down"},
 		{"knob-cw", "pressrotate", "shift-tab"},
 		{"knob-ccw", "pressrotate", "shift-tab"},
+		{"knob-press", "longhold", "agentpad:jump"},
 		{"key1", "hold", ""},
 		{"key1+key3", "chord", ""},
 		{"bogus", "tap", ""},

@@ -286,7 +286,7 @@ func TestControlActions(t *testing.T) {
 		if got := getAction(p, c, slotAction); got != "a"+string(rune('0'+i)) {
 			t.Errorf("getAction(%d) = %q", c, got)
 		}
-		if c.title() == "" || len(slotsFor(c)) == 0 {
+		if c.title() == "" || len(slotsFor(c, p, false)) != 1 {
 			t.Errorf("control %d needs a title and a slot", c)
 		}
 	}

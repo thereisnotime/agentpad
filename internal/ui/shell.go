@@ -233,7 +233,7 @@ func (t *toaster) show(kind toastKind, msg string) {
 func (u *appUI) buildShell(screens []navScreen) fyne.CanvasObject {
 	brandName := text("agentpad", 18, colText, true)
 	brand := container.NewHBox(vcenter(fixed(32, 32, widget.NewIcon(iconApp))), vcenter(brandName))
-	pills := container.NewHBox(u.pillPad, u.pillAgents, u.pillRecv)
+	pills := container.NewHBox(u.pillPad, u.pillAgents, u.jumpBtn, u.pillRecv)
 	headerBG := canvas.NewRectangle(colSurface)
 	header := container.NewBorder(nil, widget.NewSeparator(), nil, nil,
 		container.NewStack(headerBG, inset(10, 10, 16, 16, container.New(&headerLayout{}, brand, pills))))

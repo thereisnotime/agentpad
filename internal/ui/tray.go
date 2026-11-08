@@ -14,6 +14,7 @@ type tray struct {
 	desk  desktop.App
 	menu  *fyne.Menu
 	last  events.State
+	wait  int
 	model []trayItem
 }
 
@@ -39,7 +40,8 @@ func newTray(u *appUI) *tray {
 
 // state collects what the menu shows. UI goroutine.
 func (t *tray) state() trayState {
-	s := trayState{Agents: t.last, Active: t.u.prefs.ActiveProfile(), Orient: t.u.profiles.orient, Follow: t.u.ledFollow.Load()}
+	s := trayState{Agents: t.last, Active: t.u.prefs.ActiveProfile(), Orient: t.u.profiles.orient,
+		Follow: t.u.ledFollow.Load(), Mode: t.u.mode, Waiting: t.wait}
 	for _, p := range t.u.profiles.profiles {
 		s.Profiles = append(s.Profiles, p.Name)
 	}
@@ -91,6 +93,10 @@ func (t *tray) do(it trayItem) {
 		on := !u.ledFollow.Load()
 		u.setLEDFollow(on)
 		u.pad.led.follow.SetChecked(on)
+	case trayMode:
+		u.setMode(ParseMode(it.Arg))
+	case trayJump:
+		u.jumpNext()
 	case trayShow:
 		u.visible.Store(true)
 		u.win.Show()
@@ -102,12 +108,15 @@ func (t *tray) do(it trayItem) {
 	t.rebuild()
 }
 
-// show reflects s in the tray. UI goroutine.
-func (t *tray) show(s events.State) {
-	if t.desk == nil || s == t.last {
+// show reflects s and the number of waiting sessions in the tray. UI goroutine.
+func (t *tray) show(s events.State, waiting int) {
+	if t.desk == nil || (s == t.last && waiting == t.wait) {
 		return
 	}
-	t.last = s
+	iconChanged := s != t.last
+	t.last, t.wait = s, waiting
 	t.rebuild()
-	t.desk.SetSystemTrayIcon(stateIcon(s))
+	if iconChanged {
+		t.desk.SetSystemTrayIcon(stateIcon(s))
+	}
 }

@@ -135,7 +135,29 @@ func validateGestures(g map[string]map[string]string) error {
 // virtual keyboard used in gesture mode cannot emit them.
 var ErrMouseInGesture = errors.New("mouse actions are not supported in gesture mode")
 
+// AgentpadPrefix starts the reserved actions agentpad handles itself instead
+// of typing them (gesture mode only), e.g. "agentpad:jump".
+const AgentpadPrefix = "agentpad:"
+
+// Reserved agentpad actions.
+const (
+	ActionJump        = AgentpadPrefix + "jump"         // jump to the waiting agent
+	ActionNextProfile = AgentpadPrefix + "next-profile" // switch to the next profile
+)
+
+// AgentpadActions returns the reserved agentpad actions.
+func AgentpadActions() []string { return []string{ActionJump, ActionNextProfile} }
+
+// IsAgentpadAction reports whether a is a reserved agentpad action.
+func IsAgentpadAction(a string) bool { return slices.Contains(AgentpadActions(), a) }
+
 func validateGestureAction(a string) error {
+	if strings.HasPrefix(a, AgentpadPrefix) {
+		if IsAgentpadAction(a) {
+			return nil
+		}
+		return fmt.Errorf("unknown agentpad action %q (want one of %s)", a, strings.Join(AgentpadActions(), ", "))
+	}
 	if err := validateAction(a); err != nil {
 		return err
 	}

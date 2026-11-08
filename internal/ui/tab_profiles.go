@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"reflect"
@@ -14,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/thereisnotime/agentpad/internal/evdev"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
 
@@ -51,6 +53,13 @@ type profilesTab struct {
 	caption    *canvas.Text
 	captionGen int
 	fade       *fyne.Animation
+
+	gestureMode bool
+	liveHint    *widget.Label
+	warning     *widget.Label
+	monitor     *fyne.Container
+	monitorBox  fyne.CanvasObject
+	monLog      gestureLog
 }
 
 func newProfilesTab(u *appUI) *profilesTab {
@@ -74,13 +83,20 @@ func newProfilesTab(u *appUI) *profilesTab {
 	stageHead := container.NewBorder(nil, nil, nil, vcenter(t.unsaved), tight(t.title, t.desc))
 	t.caption = text("", 13, colAccent, true)
 	t.caption.Alignment = fyne.TextAlignCenter
-	live := fyne.CanvasObject(container.NewCenter(t.caption))
-	if u.deps.Input == nil {
-		hint := secondary("Live input is off. Enable live input (needs input permission) to see presses here.")
-		hint.Alignment = fyne.TextAlignCenter
-		live = hint
+	t.liveHint = secondary(liveOffHint)
+	t.liveHint.Alignment = fyne.TextAlignCenter
+	t.liveHint.Wrapping = fyne.TextWrapWord
+	if u.deps.Input != nil {
+		t.liveHint.Hide()
 	}
-	stage := surface(container.NewBorder(stageHead, container.NewVBox(live, rotate, secondary(layersNote)), nil, nil,
+	t.warning = wrapLabel("")
+	t.warning.Importance = widget.WarningImportance
+	t.warning.Hide()
+	t.monitor = container.NewVBox()
+	t.monitorBox = container.NewVBox(text("Recognised", 12, colText2, true), t.monitor)
+	t.monitorBox.Hide()
+	live := container.NewVBox(container.NewCenter(t.caption), t.liveHint)
+	stage := surface(container.NewBorder(stageHead, container.NewVBox(live, t.monitorBox, rotate, t.warning, secondary(layersNote)), nil, nil,
 		inset(8, 8, 0, 0, t.view.content)))
 
 	t.inspTitle = boldLabel("")
@@ -193,11 +209,18 @@ func (t *profilesTab) loadInspector() {
 	t.inspSub.SetText("Layer 1 · " + t.draft.Name + modified)
 	t.slotsBox.Objects = nil
 	clear(t.entries)
-	slots := slotsFor(t.control)
+	slots := slotsFor(t.control, t.draft, t.gestureMode)
 	for _, s := range slots {
 		s := s
-		e := widget.NewSelectEntry(profile.SupportedKeys())
-		e.SetPlaceHolder("key, combo (ctrl-c) or media key")
+		if s.Section != "" {
+			t.slotsBox.Add(inset(6, 0, 0, 0, text(s.Section, 13, colText, true)))
+		}
+		opts := profile.SupportedKeys()
+		if s.ID != slotAction {
+			opts = gestureOptions()
+		}
+		e := widget.NewSelectEntry(opts)
+		e.SetPlaceHolder(s.Placeholder)
 		e.SetText(getAction(t.draft, t.control, s.ID))
 		e.OnChanged = func(v string) {
 			t.activeSlot = s.ID
@@ -243,6 +266,84 @@ func (t *profilesTab) syncView() {
 	} else {
 		t.unsaved.Hide()
 	}
+	t.showWarning()
+}
+
+// showWarning shows which controls plain-mode live input cannot tell apart.
+func (t *profilesTab) showWarning() {
+	w := ""
+	if !t.gestureMode {
+		w = collisionWarning(t.draft, t.orient)
+	}
+	if w == "" {
+		t.warning.Hide()
+		return
+	}
+	t.warning.SetText(w + ".")
+	t.warning.Show()
+}
+
+const liveOffHint = "Live input is off. Enable live input (needs input permission) to see presses here."
+
+// setMode switches the editor between plain and gesture slots. UI goroutine.
+func (t *profilesTab) setMode(m Mode) {
+	on := m == ModeGesture
+	if on == t.gestureMode {
+		return
+	}
+	t.gestureMode = on
+	if on {
+		t.monitorBox.Show()
+	} else {
+		t.monitorBox.Hide()
+	}
+	t.loadInspector()
+	t.showWarning()
+}
+
+// showLive updates the live input hint. UI goroutine.
+func (t *profilesTab) showLive(st liveStatus) {
+	switch {
+	case t.u.deps.Input != nil || st.Reading:
+		t.liveHint.Hide()
+		return
+	case errors.Is(st.Err, evdev.ErrPermission):
+		t.liveHint.SetText(liveOffHint + " Fix: run `just udev-install`, then replug the pad.")
+	case st.Err != nil:
+		t.liveHint.SetText("Live input is off. " + liveErrMessage(st.Err))
+	default:
+		t.liveHint.SetText(liveOffHint)
+	}
+	t.liveHint.Show()
+}
+
+// monitorAdd shows a recognised gesture in the live monitor. UI goroutine.
+func (t *profilesTab) monitorAdd(it monitorItem) {
+	t.monLog.add(it)
+	t.refreshMonitor(time.Now())
+}
+
+// refreshMonitor redraws the monitor lines, fading older ones. UI goroutine.
+func (t *profilesTab) refreshMonitor(now time.Time) {
+	items := t.monLog.items
+	for len(t.monitor.Objects) < len(items) {
+		t.monitor.Add(monoText("", 12, colText))
+	}
+	for i, o := range t.monitor.Objects {
+		txt := o.(*canvas.Text)
+		if i >= len(items) {
+			txt.Text = ""
+			txt.Refresh()
+			continue
+		}
+		c := colText
+		if items[i].Err {
+			c = colorError
+		}
+		txt.Text = items[i].Text
+		txt.Color = withAlpha(c, monitorAlpha(i, now.Sub(items[i].At)))
+		txt.Refresh()
+	}
 }
 
 func (t *profilesTab) rotate(o profile.Orientation) {
@@ -253,8 +354,10 @@ func (t *profilesTab) rotate(o profile.Orientation) {
 	t.u.prefs.SetOrientation(o)
 	t.view.setOrientation(o)
 	t.showOrientation()
+	t.showWarning()
 	if t.u.tray != nil {
 		t.u.tray.rebuild()
+		t.u.setLiveProfile(t.u.activeProfile())
 	}
 }
 
@@ -273,6 +376,9 @@ func (t *profilesTab) save() {
 		return
 	}
 	t.reload(p.Name)
+	if p.Name == t.u.activeProfile().Name {
+		t.u.setLiveProfile(p)
+	}
 	t.u.toasts.show(toastSuccess, "Saved "+p.Name+".")
 }
 
@@ -314,6 +420,10 @@ func (t *profilesTab) apply() {
 			return
 		}
 		t.hideMessage()
+		if names == nil {
+			t.u.toasts.show(toastSuccess, "Gesture mode now uses "+t.draft.Name+".")
+			return
+		}
 		t.u.toasts.show(toastSuccess, "Written to the pad. Layers: "+strings.Join(names, ", ")+".")
 	})
 }
