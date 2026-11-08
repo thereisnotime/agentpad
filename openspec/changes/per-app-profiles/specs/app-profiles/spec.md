@@ -39,3 +39,28 @@ In gesture mode the system SHALL switch the active profile immediately; in plain
 #### Scenario: Rapid alt-tab in plain mode
 - **WHEN** the user switches focus several times within the dwell time
 - **THEN** at most one pad write happens, for the window focused at the end
+
+### Requirement: Agent origin capture
+The hook command SHALL record where the calling agent runs: terminal identifiers (Konsole D-Bus service/window/session, `WINDOWID`), multiplexer identifiers (zellij session and pane, tmux pane), and the agent process ID, and attach them to the event without delaying the agent.
+
+#### Scenario: Claude in zellij inside Konsole
+- **WHEN** Claude Code runs in a zellij pane inside a Konsole tab and triggers a permission prompt
+- **THEN** the received event carries the Konsole service, window and session, the zellij session name and pane ID, and the agent PID
+
+### Requirement: Jump to waiting agent
+On a jump request the system SHALL bring the waiting agent into focus: raise its terminal window, select its terminal tab, and focus its multiplexer pane; with several waiting sessions, successive jumps SHALL cycle through them oldest first.
+
+#### Scenario: Jump from the browser
+- **WHEN** a Claude session is waiting for permission in Konsole tab 3 / zellij pane 2 and the user, focused on a browser, triggers jump
+- **THEN** the Konsole window is raised, tab 3 is selected and zellij pane 2 is focused
+
+#### Scenario: Partial information
+- **WHEN** the event has no multiplexer information
+- **THEN** the jump still raises the window and selects the tab, and reports which steps were skipped
+
+### Requirement: Attention notification
+The system SHALL optionally show a desktop notification when a session starts waiting, including agent, tool and directory, with a Jump action.
+
+#### Scenario: Notification jump
+- **WHEN** the user clicks Jump on the notification
+- **THEN** the same jump as the pad trigger is performed
