@@ -278,3 +278,14 @@ func TestMappingYAMLWithTool(t *testing.T) {
 		}
 	}
 }
+
+func TestValidNameAndIsBuiltin(t *testing.T) {
+	for name, want := range map[string]bool{"codex": true, "codex-2": true, "": false, "My Profile": false, "a_b": false} {
+		if ValidName(name) != want {
+			t.Errorf("ValidName(%q) = %v", name, !want)
+		}
+	}
+	if !IsBuiltin("media") || IsBuiltin("zellij-claude") {
+		t.Fatal("IsBuiltin wrong")
+	}
+}
