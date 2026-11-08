@@ -1,12 +1,12 @@
 ## 1. Core (internal/settings)
 
-- [ ] 1.1 Settings struct, defaults, schema 1, validation with field paths and line numbers
-- [ ] 1.2 Comment-preserving load/save (yaml.Node), unknown-key preservation, atomic writes
-- [ ] 1.3 Watcher with debounce and self-write suppression
-- [ ] 1.4 Migration from a preferences map
-- [ ] 1.5 Bundle export, import plan (merge/replace), backup, apply
-- [ ] 1.6 Single-profile export/import with rename on conflict
-- [ ] 1.7 Tests
+- [x] 1.1 Settings struct, defaults, schema 1, validation with field paths and line numbers
+- [x] 1.2 Comment-preserving load/save (yaml.Node), unknown-key preservation, atomic writes
+- [x] 1.3 Watcher with debounce and self-write suppression
+- [x] 1.4 Migration from a preferences map
+- [x] 1.5 Bundle export, import plan (merge/replace), backup, apply
+- [x] 1.6 Single-profile export/import with rename on conflict
+- [x] 1.7 Tests
 
 ## 2. UI (after UI redesign merge)
 
@@ -15,4 +15,4 @@
 
 ## 3. Docs
 
-- [ ] 3.1 docs/configuration.md with full settings reference and bundle format
+- [x] 3.1 docs/configuration.md with full settings reference and bundle format
