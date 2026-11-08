@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2/app"
 
@@ -14,7 +15,13 @@ import (
 
 // runUI starts the desktop app and blocks until it quits.
 func runUI() {
+	var input ui.PadInput
+	if os.Getenv("AGENTPAD_FAKE_INPUT") == "1" {
+		// dev only: replay a demo sequence for the live feedback animations
+		input = ui.NewFakeInput(700 * time.Millisecond)
+	}
 	ui.Run(app.NewWithID(config.AppID), ui.Deps{
+		Input:   input,
 		Writer:  pad.NewToolWriter(),
 		Store:   profile.NewFileStore(filepath.Join(config.ConfigDir(), "profiles")),
 		Bin:     selfPath(),

@@ -7,12 +7,13 @@ import (
 )
 
 var (
-	iconIdle      = fyne.NewStaticResource("agentpad-idle.svg", circleSVG(colorIdle))
-	iconBusy      = fyne.NewStaticResource("agentpad-busy.svg", circleSVG(colorBusy))
-	iconAttention = fyne.NewStaticResource("agentpad-attention.svg", circleSVG(colorAttention))
+	iconApp       = fyne.NewStaticResource("agentpad.svg", padIconSVG(iconVariantApp))
+	iconIdle      = fyne.NewStaticResource("agentpad-idle.svg", padIconSVG(iconVariantIdle))
+	iconBusy      = fyne.NewStaticResource("agentpad-busy.svg", padIconSVG(iconVariantBusy))
+	iconAttention = fyne.NewStaticResource("agentpad-attention.svg", padIconSVG(iconVariantAttention))
 )
 
-// stateIcon returns the tray / window icon for an aggregate state.
+// stateIcon returns the tray icon for an aggregate state.
 func stateIcon(s events.State) fyne.Resource {
 	switch s {
 	case events.StateAttention:

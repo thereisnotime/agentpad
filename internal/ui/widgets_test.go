@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -17,19 +17,15 @@ func TestCopyButton(t *testing.T) {
 	if got := a.Clipboard().Content(); got != "hello" {
 		t.Fatalf("clipboard = %q", got)
 	}
-	if b.Text != "Copied" {
-		t.Errorf("button text = %q, want Copied", b.Text)
+	if b.Text != "Copied ✓" {
+		t.Errorf("button text = %q", b.Text)
 	}
 }
 
 func TestSnippetCardCopies(t *testing.T) {
 	a := test.NewTempApp(t)
-	card := snippetCard(a, "Codex CLI", "~/.codex/config.toml", `notify = ["agentpad"]`).(*widget.Card)
-	if card.Title != "Codex CLI" {
-		t.Errorf("title %q", card.Title)
-	}
-	w := test.NewTempWindow(t, card)
-	_ = w
+	card := snippetCard(a, "codex", "Codex CLI", "~/.codex/config.toml", `notify = ["agentpad"]`)
+	test.NewTempWindow(t, card)
 	var btn *widget.Button
 	for _, o := range test.LaidOutObjects(card) {
 		if b, ok := o.(*widget.Button); ok {
@@ -45,34 +41,34 @@ func TestSnippetCardCopies(t *testing.T) {
 	}
 }
 
-func TestTextTableCells(t *testing.T) {
+func TestShellSwitchesAtBreakpoint(t *testing.T) {
 	test.NewTempApp(t)
-	rows := [][]string{{"claude", "busy"}, {"codex", "attention"}}
-	tbl := newTextTable([]string{"Agent", "State"}, []float32{80, 100},
-		func() int { return len(rows) },
-		func(row, col int, dot *canvas.Circle, label *widget.Label) {
-			label.SetText(rows[row][col])
-			if col == 1 {
-				dot.FillColor = stateColor(events.State(rows[row][col]))
-				dot.Show()
-			}
-		})
-	n, c := tbl.Length()
-	if n != 2 || c != 2 {
-		t.Fatalf("length = %d x %d", n, c)
+	objs := []fyne.CanvasObject{widget.NewLabel("h"), widget.NewLabel("side"), widget.NewLabel("tabs"), widget.NewLabel("c")}
+	l := shellLayout{}
+	l.Layout(objs, fyne.NewSize(1200, 800))
+	if !objs[1].Visible() || objs[2].Visible() || objs[3].Position().X != sidebarWidth {
+		t.Error("wide: want sidebar")
 	}
-	cell := newTableCell()
-	tbl.UpdateCell(widget.TableCellID{Row: 1, Col: 1}, cell)
-	dot, label := tableCellParts(cell)
-	if label.Text != "attention" || !dot.Visible() || dot.FillColor != colorAttention {
-		t.Errorf("cell = %q visible=%v color=%v", label.Text, dot.Visible(), dot.FillColor)
+	l.Layout(objs, fyne.NewSize(500, 800))
+	if objs[1].Visible() || !objs[2].Visible() || objs[3].Position().X != 0 {
+		t.Error("narrow: want top tabs")
 	}
-	tbl.UpdateCell(widget.TableCellID{Row: 0, Col: 0}, cell)
-	if _, label := tableCellParts(cell); label.Text != "claude" {
-		t.Errorf("cell = %q", label.Text)
+	if objs[3].Size().Width != 500 {
+		t.Errorf("narrow content width = %v", objs[3].Size().Width)
 	}
-	if dot.Visible() {
-		t.Error("dot should be hidden for a plain column")
+}
+
+func TestTwoPaneStacksWhenNarrow(t *testing.T) {
+	test.NewTempApp(t)
+	a, b := widget.NewLabel("main"), widget.NewLabel("side")
+	l := &twoPaneLayout{side: inspectorWidth, gap: 16}
+	l.Layout([]fyne.CanvasObject{a, b}, fyne.NewSize(1000, 600))
+	if b.Position().X <= a.Position().X || b.Position().Y != 0 {
+		t.Error("wide: side should be right of main")
+	}
+	l.Layout([]fyne.CanvasObject{a, b}, fyne.NewSize(480, 600))
+	if b.Position().X != 0 || b.Position().Y <= 0 {
+		t.Error("narrow: side should be below main")
 	}
 }
 

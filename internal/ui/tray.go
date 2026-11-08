@@ -12,12 +12,14 @@ type tray struct {
 	desk   desktop.App
 	menu   *fyne.Menu
 	status *fyne.MenuItem
+	jump   *fyne.MenuItem
 	last   events.State
 }
 
 func newTray(u *appUI) *tray {
 	t := &tray{}
-	u.app.SetIcon(iconIdle)
+	u.app.SetIcon(iconApp)
+	u.win.SetIcon(iconApp)
 	desk, ok := u.app.(desktop.App)
 	if !ok {
 		return t
@@ -26,16 +28,23 @@ func newTray(u *appUI) *tray {
 	t.status = fyne.NewMenuItem(trayStatus(events.StateIdle), nil)
 	t.status.Disabled = true
 	show := fyne.NewMenuItem("Show window", func() {
+		u.visible.Store(true)
 		u.win.Show()
 		u.win.RequestFocus()
 	})
+	// Placeholder: the jump-to-session backend is built separately.
+	t.jump = fyne.NewMenuItem("Jump to waiting agent", nil)
+	t.jump.Disabled = true
 	quit := fyne.NewMenuItem("Quit", u.quit)
 	quit.IsQuit = true
-	t.menu = fyne.NewMenu("agentpad", show, fyne.NewMenuItemSeparator(), t.status, fyne.NewMenuItemSeparator(), quit)
+	t.menu = fyne.NewMenu("agentpad", show, fyne.NewMenuItemSeparator(), t.status, t.jump, fyne.NewMenuItemSeparator(), quit)
 	desk.SetSystemTrayMenu(t.menu)
 	desk.SetSystemTrayIcon(iconIdle)
 	desk.SetSystemTrayWindow(u.win)
-	u.win.SetCloseIntercept(u.win.Hide)
+	u.win.SetCloseIntercept(func() {
+		u.visible.Store(false)
+		u.win.Hide()
+	})
 	return t
 }
 

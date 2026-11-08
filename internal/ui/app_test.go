@@ -38,7 +38,7 @@ func TestEventUpdatesSessionsAndLog(t *testing.T) {
 	if u.tracker.Aggregate() != events.StateAttention {
 		t.Fatalf("aggregate = %s", u.tracker.Aggregate())
 	}
-	if len(u.sessions.sessions) != 1 || u.sessions.empty.Visible() {
+	if len(u.sessions.sessions) != 1 || u.sessions.empty.Visible() || !u.sessions.cards[0].content.Visible() {
 		t.Errorf("sessions not shown: %d", len(u.sessions.sessions))
 	}
 	if u.sessions.title.Text != stateTitle(events.StateAttention) {
@@ -55,16 +55,23 @@ func TestProfilesEditorSaveAndReset(t *testing.T) {
 	if len(p.profiles) == 0 || p.selected != 0 {
 		t.Fatalf("profiles not loaded: %d selected=%d", len(p.profiles), p.selected)
 	}
-	name := p.current.Name
-	builtin := p.keys[0].Text
+	name := p.stored.Name
+	p.selectControl(ctlKey1)
+	builtin := p.entry().Text
 
-	p.keys[0].SetText("not-a-real-key")
+	p.entry().SetText("not-a-real-key")
+	if !p.message.Visible() {
+		t.Error("invalid key should show an inline message")
+	}
 	p.save()
-	if p.message.Text == "" || u.deps.Store.IsOverridden(name) {
-		t.Fatalf("invalid key should not save, message=%q", p.message.Text)
+	if u.deps.Store.IsOverridden(name) {
+		t.Fatal("invalid key should not save")
 	}
 
-	p.keys[0].SetText("f13")
+	p.entry().SetText("f13")
+	if p.view.controls[ctlKey1].action != "f13" {
+		t.Errorf("drawing not updated: %q", p.view.controls[ctlKey1].action)
+	}
 	p.save()
 	if !u.deps.Store.IsOverridden(name) {
 		t.Fatalf("save failed: %q", p.message.Text)
@@ -77,7 +84,60 @@ func TestProfilesEditorSaveAndReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.reload(name)
-	if p.keys[0].Text != builtin {
-		t.Errorf("after reset key 1 = %q, want %q", p.keys[0].Text, builtin)
+	p.selectControl(ctlKey1)
+	if p.entry().Text != builtin {
+		t.Errorf("after reset key 1 = %q, want %q", p.entry().Text, builtin)
+	}
+}
+
+func TestKnobSelectionAndQuickPick(t *testing.T) {
+	u := newTestUI(t)
+	p := u.profiles
+	p.selectControl(ctlKnobCW)
+	if !p.view.controls[ctlKnobCW].selected || p.view.controls[ctlKey1].selected {
+		t.Error("selection not reflected in the drawing")
+	}
+	p.quickPick("volumeup")
+	if p.draft.Knob.CW != "volumeup" {
+		t.Errorf("knob cw = %q", p.draft.Knob.CW)
+	}
+	if !p.unsaved.Visible() {
+		t.Error("unsaved marker should show")
+	}
+}
+
+func TestRotatePersistsOrientation(t *testing.T) {
+	u := newTestUI(t)
+	p := u.profiles
+	p.rotate(p.orient.RotateCW())
+	if got := u.app.Preferences().String(prefOrientation); got != string(profile.OrientClockwise) {
+		t.Errorf("orientation pref = %q", got)
+	}
+	if p.orientLb.Text != profile.OrientClockwise.Label() {
+		t.Errorf("label = %q", p.orientLb.Text)
+	}
+}
+
+func TestReceiverPillAndPolicyPrefs(t *testing.T) {
+	u := newTestUI(t)
+	if u.pillAgents.text.Text != "Agents idle" {
+		t.Errorf("agents pill = %q", u.pillAgents.text.Text)
+	}
+	pol := LEDPolicy{Attention: pad.LEDSetting{Mode: 3}, Otherwise: pad.LEDSetting{Mode: 0}}
+	u.setLEDPolicy(pol)
+	u.loadLEDPolicy(0x8890)
+	if got := *u.policy.Load(); got != pol {
+		t.Errorf("policy = %+v", got)
+	}
+}
+
+func TestNavigate(t *testing.T) {
+	u := newTestUI(t)
+	u.navigate(screenAbout)
+	if !u.screens.Objects[screenAbout].Visible() || u.screens.Objects[screenProfiles].Visible() {
+		t.Error("navigate did not switch screens")
+	}
+	if !u.nav[screenAbout][0].selected || u.nav[screenProfiles][1].selected {
+		t.Error("nav items not updated")
 	}
 }

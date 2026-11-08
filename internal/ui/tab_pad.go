@@ -2,10 +2,12 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -21,96 +23,108 @@ type padTab struct {
 	content fyne.CanvasObject
 
 	connIcon  *widget.Icon
-	connLabel *widget.Label
+	connBG    interface{ Refresh() }
+	connTitle *widget.Label
+	connSub   *widget.Label
 	connHint  *widget.Label
 
 	toolIcon  *widget.Icon
-	toolLabel *widget.Label
+	toolTitle *widget.Label
 	toolHint  *widget.Label
 
-	ledSelect *widget.Select
-	testBtn   *widget.Button
+	ledHolder *fyne.Container
+	ledFamily string
+	led       *ledPanel
 	status    *widget.Label
 }
 
 func newPadTab(u *appUI) *padTab {
 	t := &padTab{u: u}
 
-	t.connIcon = widget.NewIcon(theme.QuestionIcon())
-	t.connLabel = widget.NewLabelWithStyle("Looking for a pad…", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	t.connHint = wrapLabel(usbCHint)
-	t.connHint.Importance = widget.LowImportance
-	conn := widget.NewCard("Connection", "CH57x 3 keys + 1 knob (1189:8890 / 8840 / 8842)",
-		container.NewVBox(container.NewBorder(nil, nil, t.connIcon, nil, t.connLabel), t.connHint))
+	connBadge, connBG, connIcon := statusIcon(theme.QuestionIcon(), colorIdle)
+	t.connIcon, t.connBG = connIcon, connBG
+	t.connTitle = boldLabel("Looking for a pad…")
+	t.connSub = secondary("CH57x 3 keys + knob (1189:8890 / 8840 / 8842)")
+	t.connHint = secondary(usbCHint)
+	conn := surface(container.NewVBox(
+		container.NewBorder(nil, nil, vcenter(connBadge), nil, tight(t.connTitle, t.connSub)),
+		t.connHint,
+	))
 
-	t.toolIcon = widget.NewIcon(theme.QuestionIcon())
-	t.toolLabel = widget.NewLabelWithStyle("Checking…", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	t.toolHint = wrapLabel("Install it with `just tool-install` (puts it in ~/.local/bin), then press Recheck.")
-	t.toolHint.Importance = widget.LowImportance
+	toolBadge, _, toolIcon := statusIcon(theme.QuestionIcon(), colorIdle)
+	t.toolIcon = toolIcon
+	t.toolTitle = boldLabel("Checking ch57x-keyboard-tool…")
+	t.toolHint = secondary("Install it with `just tool-install` (puts it in ~/.local/bin), then press Recheck.")
 	t.toolHint.Hide()
 	recheck := widget.NewButtonWithIcon("Recheck", theme.ViewRefreshIcon(), t.checkTool)
-	backend := widget.NewCard("Backend", "ch57x-keyboard-tool writes mappings and LED modes",
-		container.NewVBox(container.NewBorder(nil, nil, t.toolIcon, recheck, t.toolLabel), t.toolHint))
+	backend := surface(container.NewVBox(
+		container.NewBorder(nil, nil, vcenter(toolBadge), vcenter(recheck),
+			tight(t.toolTitle, secondary("Writes key mappings and LED settings"))),
+		t.toolHint,
+	))
 
-	t.ledSelect = widget.NewSelect(ledModes, nil)
-	t.ledSelect.SetSelectedIndex(1)
-	t.testBtn = widget.NewButtonWithIcon("Test", theme.MediaPlayIcon(), t.testLED)
+	t.status = secondary("")
+	t.status.Hide()
+	t.ledHolder = container.NewStack()
+	t.rebuildLED(u.ledProduct(0))
 
-	// Set initial values before wiring callbacks so loading doesn't write prefs.
-	follow := widget.NewCheck("LED follows agents", nil)
-	follow.SetChecked(u.ledFollow.Load())
-	follow.OnChanged = u.setLEDFollow
-	attention := widget.NewSelect(ledModes[1:], nil)
-	if n := int(u.attentionMode.Load()); n > 0 && n < len(ledModes) {
-		attention.SetSelectedIndex(n - 1)
-	}
-	attention.OnChanged = func(s string) {
-		if n := ledModeIndex(s); n > 0 {
-			u.setAttentionMode(n)
-		}
-	}
-	led := widget.NewCard("LED", "Board 8890 only selects LED modes by index; 0 is off",
-		widget.NewForm(
-			widget.NewFormItem("Mode", container.NewHBox(t.ledSelect, t.testBtn)),
-			widget.NewFormItem("", follow),
-			widget.NewFormItem("Attention mode", attention),
-		))
-
-	t.status = widget.NewLabel("")
-	t.status.Wrapping = fyne.TextWrapWord
-
-	t.content = container.NewBorder(nil, t.status, nil, nil,
-		container.NewVScroll(container.NewVBox(conn, backend, led)))
+	body := container.NewVBox(
+		screenTitle("Pad", "Connection, backend and lighting"),
+		newGrid(320, conn, backend),
+		t.ledHolder,
+		t.status,
+	)
+	t.content = screen(body)
 	return t
+}
+
+// rebuildLED swaps in the LED panel for pid's model. UI goroutine.
+func (t *padTab) rebuildLED(pid uint16) {
+	fam := ledFamily(pid)
+	if fam == t.ledFamily {
+		return
+	}
+	t.ledFamily = fam
+	t.led = newLEDPanel(t.u, pid)
+	t.ledHolder.Objects = []fyne.CanvasObject{t.led.content}
+	t.ledHolder.Refresh()
+}
+
+// reloadLED rebuilds the LED panel (after settings changed elsewhere). UI goroutine.
+func (t *padTab) reloadLED() {
+	pid := t.u.ledProduct(t.u.device.ProductID)
+	t.ledFamily = ""
+	t.rebuildLED(pid)
 }
 
 // start does the first device and backend check. UI goroutine.
 func (t *padTab) start() {
 	t.checkTool()
-	go func() {
-		dev, err := pad.Detect()
-		t.u.padPresent.Store(err == nil)
-		if err == nil {
-			t.u.writer.setProduct(dev.ProductID)
-		}
-		fyne.Do(func() { t.showDevice(dev, err) })
-	}()
+	go t.u.detect()
 }
 
+// showDevice is called by appUI.showDevice. UI goroutine.
 func (t *padTab) showDevice(d pad.Device, err error) {
 	if err != nil {
 		t.connIcon.SetResource(theme.WarningIcon())
 		if errors.Is(err, pad.ErrNotConnected) {
-			t.connLabel.SetText("Not connected")
+			t.connTitle.SetText("No pad connected")
 		} else {
-			t.connLabel.SetText("Detection failed: " + err.Error())
+			t.connTitle.SetText("Detection failed: " + err.Error())
 		}
+		t.connSub.SetText("CH57x 3 keys + knob (1189:8890 / 8840 / 8842)")
 		t.connHint.Show()
 		return
 	}
-	t.connIcon.SetResource(theme.ConfirmIcon())
-	t.connLabel.SetText(deviceLabel(d))
+	t.connIcon.SetResource(theme.NewSuccessThemedResource(theme.ConfirmIcon()))
+	name := d.Product
+	if name == "" {
+		name = "CH57x pad"
+	}
+	t.connTitle.SetText(name + " connected")
+	t.connSub.SetText(fmt.Sprintf("%04x:%04x · USB bus %s", d.VendorID, d.ProductID, d.BusPath))
 	t.connHint.Hide()
+	t.rebuildLED(d.ProductID)
 }
 
 func (t *padTab) checkTool() {
@@ -118,41 +132,22 @@ func (t *padTab) checkTool() {
 		err := t.u.writer.Available()
 		fyne.Do(func() {
 			if err != nil {
-				t.toolIcon.SetResource(theme.ErrorIcon())
-				t.toolLabel.SetText("ch57x-keyboard-tool not available")
+				t.toolIcon.SetResource(theme.NewErrorThemedResource(theme.ErrorIcon()))
+				t.toolTitle.SetText("ch57x-keyboard-tool not found")
 				t.toolHint.Show()
 				return
 			}
-			t.toolIcon.SetResource(theme.ConfirmIcon())
-			t.toolLabel.SetText("ch57x-keyboard-tool ready")
+			t.toolIcon.SetResource(theme.NewSuccessThemedResource(theme.ConfirmIcon()))
+			t.toolTitle.SetText("ch57x-keyboard-tool ready")
 			t.toolHint.Hide()
 		})
 	}()
 }
 
-func (t *padTab) testLED() {
-	n := ledModeIndex(t.ledSelect.Selected)
-	if n < 0 {
-		return
-	}
-	t.testBtn.Disable()
-	t.setStatus("Setting LED mode…")
-	go func() {
-		err := t.u.writer.SetLED(pad.LEDSetting{Mode: n})
-		t.u.led.Forget()
-		fyne.Do(func() {
-			t.testBtn.Enable()
-			if err != nil {
-				t.u.showWriteError("LED test failed", err)
-				t.setStatus("LED test failed: " + writeErrMessage(err))
-				return
-			}
-			t.setStatus("LED mode " + ledModes[n] + " set")
-		})
-	}()
+func (t *padTab) setStatus(s string) {
+	t.status.SetText(s)
+	t.status.Show()
 }
-
-func (t *padTab) setStatus(s string) { t.status.SetText(s) }
 
 // showWriteError explains a failed pad write. UI goroutine.
 func (u *appUI) showWriteError(title string, err error) {
@@ -170,11 +165,10 @@ func (u *appUI) showWriteError(title string, err error) {
 		d.Show()
 		return
 	}
-	dialog.ShowInformation(title, writeErrMessage(err), u.win)
+	u.toasts.show(toastError, title+": "+writeErrMessage(err))
 }
 
-func wrapLabel(s string) *widget.Label {
-	l := widget.NewLabel(s)
-	l.Wrapping = fyne.TextWrapWord
-	return l
+// actionRow right-aligns buttons, wrapping on narrow widths.
+func actionRow(objs ...fyne.CanvasObject) fyne.CanvasObject {
+	return container.NewBorder(nil, nil, nil, container.NewHBox(objs...), layout.NewSpacer())
 }
