@@ -122,18 +122,19 @@ func writeAtomic(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+	cleanup := func(err error) error {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		return cleanup(err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		os.Remove(tmp.Name())
-		return err
+		return cleanup(err)
 	}
 	return os.Rename(tmp.Name(), path)
 }

@@ -10,7 +10,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/thereisnotime/agentpad/internal/desktopentry"
 )
@@ -47,16 +46,4 @@ func main() {
 	// a generic icon for the window. Never fatal.
 	_, _ = desktopentry.Ensure(desktopentry.DataHome(), selfPath())
 	runUI()
-}
-
-// selfPath returns the absolute, symlink-resolved path of this binary.
-func selfPath() string {
-	p, err := os.Executable()
-	if err != nil {
-		return "agentpad"
-	}
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		p = r
-	}
-	return p
 }
