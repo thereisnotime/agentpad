@@ -138,7 +138,8 @@ func (t *padTab) testLED() {
 	t.testBtn.Disable()
 	t.setStatus("Setting LED mode…")
 	go func() {
-		err := t.u.writer.SetLED(n)
+		err := t.u.writer.SetLED(pad.LEDSetting{Mode: n})
+		t.u.led.Forget()
 		fyne.Do(func() {
 			t.testBtn.Enable()
 			if err != nil {

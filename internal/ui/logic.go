@@ -247,9 +247,9 @@ func (w *deviceWriter) tool() *pad.ToolWriter {
 	return &t
 }
 
-func (w *deviceWriter) Available() error            { return w.tool().Available() }
-func (w *deviceWriter) Upload(mapping []byte) error { return w.tool().Upload(mapping) }
-func (w *deviceWriter) SetLED(n int) error          { return w.tool().SetLED(n) }
+func (w *deviceWriter) Available() error              { return w.tool().Available() }
+func (w *deviceWriter) Upload(mapping []byte) error   { return w.tool().Upload(mapping) }
+func (w *deviceWriter) SetLED(s pad.LEDSetting) error { return w.tool().SetLED(s) }
 
 var _ pad.Writer = (*deviceWriter)(nil)
 

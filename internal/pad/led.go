@@ -15,9 +15,10 @@ type LEDController struct {
 	afterF   func(time.Duration, func()) stopper
 
 	mu        sync.Mutex
-	current   int       // last successfully applied mode, -1 if none
-	lastWrite time.Time // time of the last write attempt
-	pending   int       // mode waiting for the timer, valid when timer != nil
+	current   LEDSetting // last successfully applied setting, valid when has
+	has       bool
+	lastWrite time.Time  // time of the last write attempt
+	pending   LEDSetting // setting waiting for the timer, valid when timer != nil
 	timer     stopper
 	closed    bool
 }
@@ -31,12 +32,11 @@ func NewLEDController(w Writer, minInterval time.Duration) *LEDController {
 		interval: minInterval,
 		now:      time.Now,
 		afterF:   func(d time.Duration, f func()) stopper { return time.AfterFunc(d, f) },
-		current:  -1,
 	}
 }
 
-// Set requests mode n. Returns the error of an immediate write, nil if deferred or unchanged.
-func (c *LEDController) Set(n int) error {
+// Set requests setting n. Returns the error of an immediate write, nil if deferred or unchanged.
+func (c *LEDController) Set(n LEDSetting) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
@@ -47,7 +47,7 @@ func (c *LEDController) Set(n int) error {
 		c.pending = n
 		return nil
 	}
-	if n == c.current {
+	if c.has && n == c.current {
 		return nil
 	}
 	if wait := c.interval - c.now().Sub(c.lastWrite); !c.lastWrite.IsZero() && wait > 0 {
@@ -65,26 +65,34 @@ func (c *LEDController) fire() {
 		return
 	}
 	c.timer = nil
-	if c.pending == c.current {
+	if c.has && c.pending == c.current {
 		return
 	}
 	_ = c.writeLocked(c.pending) // nobody to report to; Current() stays unchanged on error
 }
 
-func (c *LEDController) writeLocked(n int) error {
+func (c *LEDController) writeLocked(n LEDSetting) error {
 	c.lastWrite = c.now()
 	if err := c.w.SetLED(n); err != nil {
 		return err
 	}
-	c.current = n
+	c.current, c.has = n, true
 	return nil
 }
 
-// Current returns the last successfully applied mode, or -1 if none.
-func (c *LEDController) Current() int {
+// Current returns the last successfully applied setting and whether there is one.
+func (c *LEDController) Current() (LEDSetting, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.current
+	return c.current, c.has
+}
+
+// Forget clears the remembered setting so the next Set always writes
+// (use after writing the LED outside the controller).
+func (c *LEDController) Forget() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.has = false
 }
 
 // Close stops any pending deferred write.

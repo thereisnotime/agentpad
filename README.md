@@ -129,10 +129,32 @@ sequenceDiagram
 Any CH57x-based pad with USB ID `1189:8890`, `1189:8840` or `1189:8842`. The tested target is the 3 keys + 1 knob variant.
 
 > [!WARNING]
-> **USB-C quirk.** Many of these pads leave out the 5.1&nbsp;kΩ CC pull-down resistors on their USB-C socket.
-> A USB-C host (laptop, phone) then never turns on power: no LED, nothing in `lsusb`, and even an inline USB meter stays dark.
-> Use a **USB-A port**, or a **USB-C → USB-A adapter + USB-A → USB-C cable**, or solder 5.1&nbsp;kΩ from CC1 and CC2 to GND.
-> The bundled cable is also often charge-only.
+> **Pad dead on a USB-C laptop? It's probably fine.** To save a few cents, many of these pads leave out the two
+> 5.1&nbsp;kΩ "CC" resistors on their USB-C socket. A USB-C host only switches power on when it sees those resistors,
+> so on a USB-C only laptop or phone the pad gets **no power at all**: no LED, nothing in `lsusb`, an inline USB meter stays dark.
+> USB-A ports always supply power, so they are not affected.
+
+### Fix: go through USB-A
+
+```mermaid
+flowchart LR
+    L["💻 Laptop<br/>USB-C port"] --> AD["🔌 USB-C → USB-A<br/>adapter / hub"]
+    AD --> CB["🧵 USB-A → USB-C<br/>data cable"]
+    CB --> P["⌨️ Pad"]
+    classDef ok fill:#ebfbee,stroke:#2f9e44,stroke-width:2px,color:#000
+    classDef mid fill:#e7f5ff,stroke:#1c7ed6,stroke-width:2px,color:#000
+    class L,P ok
+    class AD,CB mid
+```
+
+| Setup | Works? |
+|---|---|
+| USB-C laptop → **USB-C → USB-C cable** → pad | ❌ no power (missing resistors) |
+| USB-C laptop → **USB-C → USB-A adapter** → **USB-A → USB-C cable** → pad | ✅ the adapter tells the laptop to supply power |
+| USB-A port → **USB-A → USB-C cable** → pad | ✅ |
+| Solder 5.1&nbsp;kΩ from CC1 and CC2 to GND inside the pad | ✅ permanent fix, any cable works |
+
+Also check the cable: the one bundled with these pads is often **charge-only** (no data wires).
 
 ## Install
 

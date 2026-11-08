@@ -81,13 +81,13 @@ func TestToolWriterArgs(t *testing.T) {
 	if err := w.Upload([]byte("doc")); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.SetLED(2); err != nil {
+	if err := w.SetLED(m(2)); err != nil {
 		t.Fatal(err)
 	}
 	w.ProductID = 0x8890
-	_ = w.SetLED(0)
+	_ = w.SetLED(m(0))
 	w.ProductID = 0x8840
-	_ = w.SetLED(1)
+	_ = w.SetLED(m(1))
 	want := []call{
 		{[]string{"upload"}, "doc"},
 		{[]string{"led", "2"}, ""},
@@ -136,7 +136,7 @@ func TestToolWriterErrors(t *testing.T) {
 
 func TestToolWriterMissing(t *testing.T) {
 	w := &ToolWriter{lookPath: func(string) (string, error) { return "", exec.ErrNotFound }}
-	for _, err := range []error{w.Available(), w.Upload(nil), w.SetLED(1)} {
+	for _, err := range []error{w.Available(), w.Upload(nil), w.SetLED(m(1))} {
 		if !errors.Is(err, ErrToolMissing) {
 			t.Fatalf("got %v", err)
 		}
@@ -155,7 +155,7 @@ func TestToolWriterRealNoPad(t *testing.T) {
 	if _, err := Detect(); err == nil {
 		t.Skip("a pad is connected")
 	}
-	if err := NewToolWriter().SetLED(0); !errors.Is(err, ErrNotConnected) {
+	if err := NewToolWriter().SetLED(m(0)); !errors.Is(err, ErrNotConnected) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -169,7 +169,8 @@ type fakeLED struct {
 
 func (f *fakeLED) Available() error      { return nil }
 func (f *fakeLED) Upload(_ []byte) error { return nil }
-func (f *fakeLED) SetLED(n int) error {
+func (f *fakeLED) SetLED(s LEDSetting) error {
+	n := s.Mode
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.got = append(f.got, n)
@@ -245,31 +246,31 @@ func newTestLED(w Writer) (*LEDController, *fakeClock) {
 func TestLEDChangeOnly(t *testing.T) {
 	f := &fakeLED{}
 	c, clk := newTestLED(f)
-	if c.Current() != -1 {
+	if curMode(c) != -1 {
 		t.Fatal("initial Current should be -1")
 	}
-	_ = c.Set(1)
+	_ = c.Set(m(1))
 	clk.Advance(5 * time.Second)
-	_ = c.Set(1)
-	_ = c.Set(1)
+	_ = c.Set(m(1))
+	_ = c.Set(m(1))
 	clk.Advance(5 * time.Second)
-	_ = c.Set(0)
+	_ = c.Set(m(0))
 	if got := f.writes(); !reflect.DeepEqual(got, []int{1, 0}) {
 		t.Fatalf("writes = %v", got)
 	}
-	if c.Current() != 0 {
-		t.Fatalf("Current = %d", c.Current())
+	if curMode(c) != 0 {
+		t.Fatalf("Current = %d", curMode(c))
 	}
 }
 
 func TestLEDDeferLatestWins(t *testing.T) {
 	f := &fakeLED{}
 	c, clk := newTestLED(f)
-	_ = c.Set(1)
+	_ = c.Set(m(1))
 	clk.Advance(500 * time.Millisecond)
-	_ = c.Set(2)
-	_ = c.Set(3)
-	_ = c.Set(4)
+	_ = c.Set(m(2))
+	_ = c.Set(m(3))
+	_ = c.Set(m(4))
 	if got := f.writes(); !reflect.DeepEqual(got, []int{1}) {
 		t.Fatalf("before interval: %v", got)
 	}
@@ -281,14 +282,14 @@ func TestLEDDeferLatestWins(t *testing.T) {
 	if got := f.writes(); !reflect.DeepEqual(got, []int{1, 4}) {
 		t.Fatalf("after interval: %v", got)
 	}
-	if c.Current() != 4 {
-		t.Fatalf("Current = %d", c.Current())
+	if curMode(c) != 4 {
+		t.Fatalf("Current = %d", curMode(c))
 	}
 
 	// Deferred request that returns to the current mode writes nothing.
 	clk.Advance(100 * time.Millisecond)
-	_ = c.Set(5)
-	_ = c.Set(4)
+	_ = c.Set(m(5))
+	_ = c.Set(m(4))
 	clk.Advance(3 * time.Second)
 	if got := f.writes(); !reflect.DeepEqual(got, []int{1, 4}) {
 		t.Fatalf("revert: %v", got)
@@ -298,16 +299,16 @@ func TestLEDDeferLatestWins(t *testing.T) {
 func TestLEDErrorAndClose(t *testing.T) {
 	f := &fakeLED{fail: true}
 	c, clk := newTestLED(f)
-	if err := c.Set(1); err == nil {
+	if err := c.Set(m(1)); err == nil {
 		t.Fatal("expected immediate error")
 	}
-	if c.Current() != -1 {
+	if curMode(c) != -1 {
 		t.Fatal("Current changed on failure")
 	}
-	_ = c.Set(2) // within interval: deferred
+	_ = c.Set(m(2)) // within interval: deferred
 	c.Close()
 	clk.Advance(5 * time.Second)
-	_ = c.Set(3)
+	_ = c.Set(m(3))
 	if got := f.writes(); !reflect.DeepEqual(got, []int{1}) {
 		t.Fatalf("writes = %v", got)
 	}
@@ -318,21 +319,31 @@ func TestLEDRealTimer(t *testing.T) {
 	f := &fakeLED{done: make(chan struct{}, 4)}
 	c := NewLEDController(f, 50*time.Millisecond)
 	defer c.Close()
-	_ = c.Set(1)
+	_ = c.Set(m(1))
 	<-f.done
 	var wg sync.WaitGroup
 	for i := 2; i <= 6; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); _ = c.Set(i) }()
+		go func() { defer wg.Done(); _ = c.Set(m(i)) }()
 	}
 	wg.Wait()
-	_ = c.Set(9)
+	_ = c.Set(m(9))
 	select {
 	case <-f.done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("deferred write never happened")
 	}
-	if got := f.writes(); len(got) != 2 || got[1] != 9 || c.Current() != 9 {
-		t.Fatalf("writes = %v current = %d", got, c.Current())
+	if got := f.writes(); len(got) != 2 || got[1] != 9 || curMode(c) != 9 {
+		t.Fatalf("writes = %v current = %d", got, curMode(c))
 	}
+}
+
+func m(n int) LEDSetting { return LEDSetting{Mode: n} }
+
+func curMode(c *LEDController) int {
+	s, ok := c.Current()
+	if !ok {
+		return -1
+	}
+	return s.Mode
 }

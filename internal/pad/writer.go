@@ -63,9 +63,9 @@ func (w *ToolWriter) Upload(mapping []byte) error {
 	return w.exec(mapping, "upload")
 }
 
-// SetLED selects LED mode n.
-func (w *ToolWriter) SetLED(n int) error {
-	return w.exec(nil, "led", strconv.Itoa(n))
+// SetLED applies s. Stub: backend work adds CapsFor validation and 884x args.
+func (w *ToolWriter) SetLED(s LEDSetting) error {
+	return w.exec(nil, "led", strconv.Itoa(s.Mode))
 }
 
 func (w *ToolWriter) exec(stdin []byte, args ...string) error {

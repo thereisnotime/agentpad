@@ -196,7 +196,7 @@ func (u *appUI) followLED() {
 		return
 	}
 	mode := ledPolicy(u.tracker.Aggregate(), int(u.attentionMode.Load()))
-	if err := u.led.Set(mode); err != nil {
+	if err := u.led.Set(pad.LEDSetting{Mode: mode}); err != nil {
 		fyne.Do(func() { u.pad.setStatus("LED: " + writeErrMessage(err)) })
 	}
 }

@@ -31,6 +31,6 @@ type Writer interface {
 	Available() error
 	// Upload writes a ch57x-keyboard-tool mapping YAML document to the pad.
 	Upload(mappingYAML []byte) error
-	// SetLED selects LED mode n (0 = off on 8890 boards).
-	SetLED(n int) error
+	// SetLED applies an LED setting. Settings are validated against CapsFor first.
+	SetLED(s LEDSetting) error
 }
