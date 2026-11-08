@@ -1,0 +1,1 @@
+{"type":"permission.asked","properties":{"id":"per_01","sessionID":"ses_01","permission":"bash","patterns":["rm -rf build"],"metadata":{},"always":["rm *"],"tool":{"messageID":"msg_01","callID":"call_01"}}}

@@ -1,0 +1,1 @@
+{"session_id":"abc123","cwd":"/home/u/proj","permission_mode":"default","hook_event_name":"PostToolUse","tool_name":"Write","tool_input":{"file_path":"/path/to/file.txt","content":"x"},"tool_response":{"filePath":"/path/to/file.txt","type":"create"},"tool_use_id":"toolu_01ABC","duration_ms":12}
