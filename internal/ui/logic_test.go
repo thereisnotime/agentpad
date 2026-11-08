@@ -12,36 +12,6 @@ import (
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
 
-func TestLEDPolicy(t *testing.T) {
-	cases := []struct {
-		s    events.State
-		att  int
-		want int
-	}{
-		{events.StateAttention, 1, 1},
-		{events.StateAttention, 2, 2},
-		{events.StateBusy, 1, 0},
-		{events.StateIdle, 2, 0},
-		{"", 1, 0},
-	}
-	for _, c := range cases {
-		if got := ledPolicy(c.s, c.att); got != c.want {
-			t.Errorf("ledPolicy(%q, %d) = %d, want %d", c.s, c.att, got, c.want)
-		}
-	}
-}
-
-func TestLEDModeIndex(t *testing.T) {
-	for i, m := range ledModes {
-		if got := ledModeIndex(m); got != i {
-			t.Errorf("ledModeIndex(%q) = %d, want %d", m, got, i)
-		}
-	}
-	if ledModeIndex("9") != -1 {
-		t.Error("unknown mode should be -1")
-	}
-}
-
 func TestStateColor(t *testing.T) {
 	if stateColor(events.StateAttention) != colorAttention ||
 		stateColor(events.StateBusy) != colorBusy ||
@@ -150,29 +120,11 @@ func TestLogCell(t *testing.T) {
 	}
 }
 
-func TestProfileFromControls(t *testing.T) {
-	base := profile.Profile{Name: "x", Description: "d"}
-	p := profileFromControls(base, [3]string{" 1", "2 ", "escape"}, "up", " enter ", "down")
-	if p.Name != "x" || p.Description != "d" {
-		t.Error("name/description lost")
-	}
-	if p.Keys != [3]string{"1", "2", "escape"} || p.Knob != (profile.Knob{CCW: "up", Press: "enter", CW: "down"}) {
-		t.Errorf("got %+v", p)
-	}
-}
-
 func TestReplaceProfile(t *testing.T) {
 	list := []profile.Profile{{Name: "a"}, {Name: "b"}}
 	out := replaceProfile(list, profile.Profile{Name: "b", Description: "new"})
 	if out[1].Description != "new" || list[1].Description != "" {
 		t.Error("replace must copy, not mutate")
-	}
-}
-
-func TestCircleSVG(t *testing.T) {
-	s := string(circleSVG(colorBusy))
-	if !strings.HasPrefix(s, "<svg") || !strings.Contains(s, "#1e88e5") {
-		t.Errorf("bad svg: %s", s)
 	}
 }
 

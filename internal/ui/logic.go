@@ -5,7 +5,6 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"image/color"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,45 +14,6 @@ import (
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
 )
-
-// LED mode choices offered in the UI.
-var ledModes = []string{"0 (off)", "1", "2"}
-
-// ledModeIndex parses a ledModes entry back to its index; -1 if unknown.
-func ledModeIndex(s string) int {
-	for i, m := range ledModes {
-		if m == s {
-			return i
-		}
-	}
-	return -1
-}
-
-// ledPolicy maps the aggregate agent state to an LED mode.
-func ledPolicy(s events.State, attentionMode int) int {
-	if s == events.StateAttention {
-		return attentionMode
-	}
-	return 0
-}
-
-var (
-	colorAttention = color.NRGBA{R: 0xf5, G: 0x7c, B: 0x00, A: 0xff}
-	colorBusy      = color.NRGBA{R: 0x1e, G: 0x88, B: 0xe5, A: 0xff}
-	colorIdle      = color.NRGBA{R: 0x9e, G: 0x9e, B: 0x9e, A: 0xff}
-)
-
-// stateColor returns the indicator colour of a session or aggregate state.
-func stateColor(s events.State) color.NRGBA {
-	switch s {
-	case events.StateAttention:
-		return colorAttention
-	case events.StateBusy:
-		return colorBusy
-	default:
-		return colorIdle
-	}
-}
 
 // stateTitle is the human headline for an aggregate state.
 func stateTitle(s events.State) string {
@@ -130,15 +90,6 @@ func writeErrMessage(err error) string {
 	}
 }
 
-// deviceLabel describes a detected pad.
-func deviceLabel(d pad.Device) string {
-	name := d.Product
-	if name == "" {
-		name = "CH57x pad"
-	}
-	return fmt.Sprintf("%s  %04x:%04x  on bus %s", name, d.VendorID, d.ProductID, d.BusPath)
-}
-
 // logColumns are the headers of the Log tab.
 var logColumns = []string{"Time", "Agent", "Kind", "Tool", "Session", "Message"}
 
@@ -183,17 +134,6 @@ func (r *ring) newest(i int) events.Event { return r.events[len(r.events)-1-i] }
 
 func (r *ring) clear() { r.events = nil }
 
-// profileFromControls builds a profile from the six editor fields, keeping
-// name and description from base.
-func profileFromControls(base profile.Profile, keys [3]string, ccw, press, cw string) profile.Profile {
-	p := base
-	for i := range keys {
-		p.Keys[i] = strings.TrimSpace(keys[i])
-	}
-	p.Knob = profile.Knob{CCW: strings.TrimSpace(ccw), Press: strings.TrimSpace(press), CW: strings.TrimSpace(cw)}
-	return p
-}
-
 // replaceProfile returns a copy of list with the profile named p.Name replaced by p.
 func replaceProfile(list []profile.Profile, p profile.Profile) []profile.Profile {
 	out := make([]profile.Profile, len(list))
@@ -206,19 +146,12 @@ func replaceProfile(list []profile.Profile, p profile.Profile) []profile.Profile
 	return out
 }
 
-// circleSVG renders a filled circle icon used for tray state.
-func circleSVG(c color.NRGBA) []byte {
-	return fmt.Appendf(nil,
-		`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">`+
-			`<circle cx="32" cy="32" r="26" fill="#%02x%02x%02x" stroke="#ffffff" stroke-width="4"/></svg>`,
-		c.R, c.G, c.B)
-}
-
 // deviceWriter is a pad.Writer that targets whichever pad was last detected.
 // pad.ToolWriter has a plain ProductID field, so we never mutate a shared one
 // from several goroutines; each call works on a fresh copy instead.
 type deviceWriter struct {
 	mu   sync.Mutex
+	io   sync.Mutex
 	base pad.ToolWriter
 	pid  uint16
 }
@@ -247,9 +180,31 @@ func (w *deviceWriter) tool() *pad.ToolWriter {
 	return &t
 }
 
-func (w *deviceWriter) Available() error              { return w.tool().Available() }
-func (w *deviceWriter) Upload(mapping []byte) error   { return w.tool().Upload(mapping) }
-func (w *deviceWriter) SetLED(s pad.LEDSetting) error { return w.tool().SetLED(s) }
+func (w *deviceWriter) Available() error { return w.tool().Available() }
+
+// Upload and SetLED hold io so the tool never runs twice at once (the LED
+// controller's deferred writes fire on a timer goroutine).
+func (w *deviceWriter) Upload(mapping []byte) error {
+	w.io.Lock()
+	defer w.io.Unlock()
+	return w.tool().Upload(mapping)
+}
+
+func (w *deviceWriter) SetLED(s pad.LEDSetting) error {
+	w.io.Lock()
+	defer w.io.Unlock()
+	return w.tool().SetLED(s)
+}
+
+// product returns the last detected product ID, or 0x8890 when none was seen.
+func (w *deviceWriter) product() uint16 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.pid == 0 {
+		return 0x8890
+	}
+	return w.pid
+}
 
 var _ pad.Writer = (*deviceWriter)(nil)
 
