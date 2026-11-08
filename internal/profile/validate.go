@@ -98,7 +98,7 @@ func Validate(p Profile) error {
 			return fmt.Errorf("%s: %w", c.label, err)
 		}
 	}
-	return nil
+	return validateGestures(p.Gestures)
 }
 
 func validateAction(a string) error {

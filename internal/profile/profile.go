@@ -15,6 +15,10 @@ type Profile struct {
 	Description string    `yaml:"description"`
 	Keys        [3]string `yaml:"keys"`
 	Knob        Knob      `yaml:"knob"`
+	// Gestures holds optional gesture-mode actions: control -> kind -> action,
+	// e.g. gestures["key3"]["hold"] = "ctrl-c". See gestures.go for the names.
+	// Nil for profiles without gestures; plain mode ignores it.
+	Gestures map[string]map[string]string `yaml:"gestures,omitempty"`
 }
 
 // Store persists user overrides of profiles. Implemented in store.go.

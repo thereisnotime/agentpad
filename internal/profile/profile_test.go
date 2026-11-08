@@ -118,7 +118,7 @@ func TestStore(t *testing.T) {
 	// A new store on the same dir simulates an app restart.
 	s2 := NewFileStore(dir)
 	got, err := s2.Get("codex")
-	if err != nil || got != codex {
+	if err != nil || !reflect.DeepEqual(got, codex) {
 		t.Fatalf("round trip = %+v, %v", got, err)
 	}
 
@@ -161,7 +161,7 @@ func TestStore(t *testing.T) {
 		t.Fatalf("second reset: %v", err)
 	}
 	got, _ = s.Get("codex")
-	if got != Builtins()[1] || s.IsOverridden("codex") {
+	if !reflect.DeepEqual(got, Builtins()[1]) || s.IsOverridden("codex") {
 		t.Fatalf("after reset = %+v", got)
 	}
 	matches, _ := filepath.Glob(filepath.Join(dir, "*.tmp"))
