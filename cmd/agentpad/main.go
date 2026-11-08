@@ -24,6 +24,10 @@ func main() {
 		case "version", "--version", "-v":
 			fmt.Println("agentpad", version)
 			return
+		case "led-lab":
+			os.Exit(runLedLab(os.Args[2:]))
+		case "led-raw":
+			os.Exit(runLedRaw(os.Args[2:]))
 		case "desktop-install":
 			if _, err := desktopentry.Ensure(desktopentry.DataHome(), selfPath()); err != nil {
 				fmt.Fprintln(os.Stderr, "agentpad:", err)
