@@ -3,11 +3,16 @@
 //	agentpad                 start the desktop app
 //	agentpad hook <agent>    forward an agent hook payload (claude|codex|opencode)
 //	agentpad version         print version
+//	agentpad desktop-install install the .desktop file and icons (taskbar icon)
+//	agentpad desktop-remove  remove them again
 package main
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/thereisnotime/agentpad/internal/desktopentry"
 )
 
 var version = "dev"
@@ -20,10 +25,38 @@ func main() {
 		case "version", "--version", "-v":
 			fmt.Println("agentpad", version)
 			return
+		case "desktop-install":
+			if _, err := desktopentry.Ensure(desktopentry.DataHome(), selfPath()); err != nil {
+				fmt.Fprintln(os.Stderr, "agentpad:", err)
+				os.Exit(1)
+			}
+			fmt.Println("installed", desktopentry.PathsIn(desktopentry.DataHome()).Desktop)
+			return
+		case "desktop-remove":
+			if err := desktopentry.Remove(desktopentry.DataHome()); err != nil {
+				fmt.Fprintln(os.Stderr, "agentpad:", err)
+				os.Exit(1)
+			}
+			return
 		case "help", "--help", "-h":
-			fmt.Println("usage: agentpad [hook <claude|codex|opencode> | version]")
+			fmt.Println("usage: agentpad [hook <claude|codex|opencode> | version | desktop-install | desktop-remove]")
 			return
 		}
 	}
+	// Best effort: without a matching <app_id>.desktop file Wayland shells show
+	// a generic icon for the window. Never fatal.
+	_, _ = desktopentry.Ensure(desktopentry.DataHome(), selfPath())
 	runUI()
+}
+
+// selfPath returns the absolute, symlink-resolved path of this binary.
+func selfPath() string {
+	p, err := os.Executable()
+	if err != nil {
+		return "agentpad"
+	}
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		p = r
+	}
+	return p
 }

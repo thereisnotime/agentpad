@@ -50,7 +50,15 @@ run: build
 [group('build')]
 install: build
     install -Dm755 {{ bin }} "$HOME/.local/bin/agentpad"
+    "$HOME/.local/bin/agentpad" desktop-install
     @printf "{{ c_green }}✔ installed{{ c_reset }} ~/.local/bin/agentpad\n"
+
+# Remove agentpad, its desktop entry and icons from ~/.local
+[group('build')]
+uninstall:
+    -"$HOME/.local/bin/agentpad" desktop-remove
+    rm -f "$HOME/.local/bin/agentpad"
+    @printf "{{ c_green }}✔ uninstalled{{ c_reset }} (settings in ~/.config/agentpad kept)\n"
 
 # Remove build artifacts
 [group('build')]
