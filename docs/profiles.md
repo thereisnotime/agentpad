@@ -20,6 +20,13 @@ Prompt shortcuts differ between agent versions; adjust them in the editor if you
 **Apply** writes the selected profile to **layer 1** and the next two profiles to layers 2 and 3. The side button on the pad
 switches layers. Some boards only keep layer 1, which is why the selected profile always goes first.
 
+The pad doesn't report the side button, so agentpad guesses the layer from the keys it sends: after Apply it assumes
+layer 1, and a key only another layer sends moves the guess there (`y` with claude-code, codex, opencode applied means
+layer 2). The Profiles editor shows `Pad on layer 2 · codex` and the header pill gets an `L2` suffix; a key several
+layers send (`a` on codex and opencode) shows both until another key settles it. The "pad holds a different mapping"
+warning only appears for keys no layer sends. In gesture mode every layer holds the same F13–F18 keys, so layers don't
+matter there.
+
 ## Action grammar
 
 Actions use the [`ch57x-keyboard-tool`](https://github.com/kriomant/ch57x-keyboard-tool) syntax. agentpad validates every action before writing.

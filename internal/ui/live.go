@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -61,13 +62,19 @@ type liveCallbacks struct {
 	Status  func(liveStatus)    // status changed
 	// Agentpad handles reserved actions ("agentpad:jump") instead of typing them.
 	Agentpad func(action string)
-	// Unexpected reports a pressed key the active profile cannot produce:
-	// the pad holds a different mapping (plain mode only).
+	// Unexpected reports a pressed key no pad layer can produce: the pad
+	// holds a different mapping (plain mode only).
 	Unexpected func(code uint16)
+	// Layer reports a new guess of the pad's layer (plain mode only).
+	Layer func(layerInfo)
 }
 
 type liveController struct {
-	expected map[uint16]bool // keycodes the active profile can produce (guarded by mu)
+	// Pad layers and the guess of the one in use (plain mode).
+	layerMu    sync.Mutex
+	layerProfs []profile.Profile // as applied: active profile first
+	layers     []layerMap
+	guess      layerGuess
 
 	dev    LiveDevices
 	upload func(doc []byte) error // synchronous pad upload (through the device worker)
@@ -120,7 +127,7 @@ func (c *liveController) Mode() Mode {
 }
 
 // SetProfile sets the active profile and orientation. In plain mode it
-// rebuilds the observer's key map; in gesture mode it hands the profile to
+// rebuilds the layer key maps live input is drawn with; in gesture mode it hands the profile to
 // the engine and re-programs the gesture mapping when the orientation
 // changed. It returns what the plain key map cannot tell apart.
 func (c *liveController) SetProfile(p profile.Profile, o profile.Orientation) (gesture.KeyMapReport, error) {
@@ -128,11 +135,11 @@ func (c *liveController) SetProfile(p profile.Profile, o profile.Orientation) (g
 	defer c.mu.Unlock()
 	rotated := o != c.orient
 	c.prof, c.orient = p, o
-	km, rep, err := gesture.PlainKeyMap(p, o)
+	_, rep, err := gesture.PlainKeyMap(p, o)
 	if err != nil {
 		return rep, err
 	}
-	c.expected = rep.Expected
+	c.rebuildLayers(p, o)
 	if c.mode == ModeGesture {
 		c.eng.SetProfile(p)
 		if rotated {
@@ -140,10 +147,84 @@ func (c *liveController) SetProfile(p profile.Profile, o profile.Orientation) (g
 		}
 		return rep, nil
 	}
-	if c.obs != nil {
-		c.obs.SetKeyMap(km)
+	return rep, nil // the observer reports raw codes; the pump maps them per layer
+}
+
+// SetLayers sets the profiles on the pad's layers (layer 1 first), as the
+// last Apply wrote them. The guess goes back to layer 1 when they change.
+func (c *liveController) SetLayers(layers []profile.Profile) {
+	c.layerMu.Lock()
+	c.layerProfs = slices.Clone(layers)
+	c.layerMu.Unlock()
+	c.mu.Lock()
+	p, o := c.prof, c.orient
+	c.mu.Unlock()
+	c.rebuildLayers(p, o)
+}
+
+// rebuildLayers recomputes the layer key maps for active profile p (which
+// replaces layer 1 when it has the same name, e.g. after a save).
+func (c *liveController) rebuildLayers(p profile.Profile, o profile.Orientation) {
+	c.layerMu.Lock()
+	ls := slices.Clone(c.layerProfs)
+	switch {
+	case p.Name == "": // no active profile yet: the layers as given
+	case len(ls) == 0 || ls[0].Name != p.Name:
+		ls = []profile.Profile{p} // active without an Apply: other layers unknown
+	default:
+		ls[0] = p // e.g. saved edits of the active profile
 	}
-	return rep, nil
+	before := make([]string, len(c.layers))
+	for i, m := range c.layers {
+		before[i] = m.Name
+	}
+	c.layers = buildLayerMaps(ls, o)
+	after := make([]string, len(c.layers))
+	for i, m := range c.layers {
+		after[i] = m.Name
+	}
+	changed := !slices.Equal(before, after)
+	if changed {
+		c.guess = newLayerGuess()
+	}
+	info := c.guess.info(c.layers)
+	c.layerMu.Unlock()
+	if changed && c.cb.Layer != nil {
+		c.cb.Layer(info)
+	}
+}
+
+// ResetLayer sets the guess back to layer 1 (after Apply).
+func (c *liveController) ResetLayer() {
+	c.layerMu.Lock()
+	c.guess = newLayerGuess()
+	info := c.guess.info(c.layers)
+	c.layerMu.Unlock()
+	if c.cb.Layer != nil {
+		c.cb.Layer(info)
+	}
+}
+
+// mapCode maps a raw keycode to a control on the guessed layer. On a press
+// it updates the guess; explained is false when no layer sends code.
+func (c *liveController) mapCode(code uint16, down bool) (ctl gesture.Control, explained bool, info *layerInfo) {
+	c.layerMu.Lock()
+	defer c.layerMu.Unlock()
+	if len(c.layers) == 0 {
+		return "", true, nil // nothing known yet
+	}
+	explained = true
+	if down {
+		next, ok := c.guess.press(c.layers, code)
+		explained = ok
+		if ok && (next.Cur != c.guess.Cur || !slices.Equal(next.Cands, c.guess.Cands)) {
+			li := next.info(c.layers)
+			info = &li
+		}
+		c.guess = next
+	}
+	ctl, _ = c.guess.control(c.layers, code)
+	return ctl, explained, info
 }
 
 // EnsureObserver starts plain-mode live input if it is not running. Called
@@ -160,11 +241,8 @@ func (c *liveController) EnsureObserver() error {
 
 // startObserver needs c.mu.
 func (c *liveController) startObserver() error {
-	km, _, err := gesture.PlainKeyMap(c.prof, c.orient)
-	if err != nil {
-		km = gesture.KeyMap{}
-	}
-	obs := gesture.NewObserver(c.dev.Observe, km)
+	// raw codes only: the pump maps them through the guessed layer
+	obs := gesture.NewObserver(c.dev.Observe, gesture.KeyMap{})
 	if err := obs.Start(context.Background()); err != nil {
 		c.setStatus(func(s *liveStatus) { s.Reading, s.Err = false, err })
 		return err
@@ -177,14 +255,18 @@ func (c *liveController) startObserver() error {
 		for ev := range obs.Events() {
 			switch ev.Status {
 			case "":
-				if ev.Unmapped {
-					if ev.Down && c.cb.Unexpected != nil && !c.isExpected(ev.Code) {
+				ctl, explained, info := c.mapCode(ev.Code, ev.Down)
+				if info != nil && c.cb.Layer != nil {
+					c.cb.Layer(*info)
+				}
+				if ctl == "" {
+					if ev.Down && !explained && c.cb.Unexpected != nil {
 						c.cb.Unexpected(ev.Code)
 					}
 					continue
 				}
 				if c.cb.Input != nil {
-					c.cb.Input(PadInputEvent{Control: string(ev.Control), Down: ev.Down, Time: ev.Time})
+					c.cb.Input(PadInputEvent{Control: string(ctl), Down: ev.Down, Time: ev.Time})
 				}
 			case gesture.StatusRunning:
 				c.setStatus(func(s *liveStatus) { s.Reading, s.Err = true, nil })
@@ -374,12 +456,4 @@ func liveErrMessage(err error) string {
 		return m
 	}
 	return err.Error()
-}
-
-// isExpected reports whether the active profile can produce code. Before the
-// first SetProfile nothing is known, so every key counts as expected.
-func (c *liveController) isExpected(code uint16) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.expected == nil || c.expected[code]
 }

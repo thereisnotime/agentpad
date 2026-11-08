@@ -28,6 +28,13 @@ When a live pad input source is configured and the window is visible, the profil
 - **WHEN** the user turns the knob clockwise by one detent
 - **THEN** the knob indicator ticks clockwise, the turn chip flashes and the caption reads "knob ↻"
 
+### Requirement: Pad layer guess
+In plain mode the UI SHALL keep the key maps of the three pad layers as last applied, guess the layer in use from the keys the pad sends (starting on layer 1 after Apply), draw presses with that layer's map, show the guess in the Profiles editor and in the header pad pill, and warn about a different mapping only when no layer can produce a key.
+
+#### Scenario: Pad switched to layer 2
+- **WHEN** claude-code, codex and opencode are applied and the pad sends `y`
+- **THEN** the editor reads "Pad on layer 2 · codex", the pill shows "L2", the press is drawn on key 1 and no mapping warning appears
+
 ### Requirement: Bug reports from the app
 The About screen SHALL open a prefilled GitHub bug report with the app version, OS and pad, and SHALL offer the same diagnostics as copyable text.
 

@@ -62,8 +62,9 @@ type profilesTab struct {
 	monitorBox  fyne.CanvasObject
 	monLog      gestureLog
 
-	chords *collapsible // gesture mode: the three chord slots
-	picks  *collapsible // quick picks
+	layerLb *widget.Label // "Pad on layer 2 · codex" (plain mode)
+	chords  *collapsible  // gesture mode: the three chord slots
+	picks   *collapsible  // quick picks
 }
 
 // monitorLines is how many lines the Recognised card shows before scrolling.
@@ -104,7 +105,10 @@ func newProfilesTab(u *appUI) *profilesTab {
 	monScroll.SetMinSize(fyne.NewSize(0, monitorLines*18))
 	t.monitorBox = surface(container.NewVBox(boldLabel("Recognised"), monScroll))
 	t.monitorBox.Hide()
-	live := container.NewVBox(container.NewCenter(t.caption), t.liveHint)
+	t.layerLb = secondary("")
+	t.layerLb.Alignment = fyne.TextAlignCenter
+	t.layerLb.Hide()
+	live := container.NewVBox(container.NewCenter(t.caption), t.layerLb, t.liveHint)
 	// natural heights, top to bottom: drawing, rotate row, notes
 	stage := surface(container.NewVBox(stageHead, inset(8, 0, 0, 0, t.view.content), live, rotate, t.warning, secondary(layersNote)))
 	left := container.NewVBox(stage, t.monitorBox)
@@ -381,7 +385,8 @@ func (t *profilesTab) setMode(m Mode) {
 	} else {
 		t.monitorBox.Hide()
 	}
-	t.picks.setOpen(!on) // the many gesture slots need the room
+	t.picks.setOpen(!on)      // the many gesture slots need the room
+	t.showLayer(t.u.padLayer) // layers don't matter in gesture mode
 	t.loadInspector()
 	t.showWarning()
 }
@@ -611,3 +616,13 @@ func (t *profilesTab) inspectorLimit() float32 {
 // inspectorChrome is the height above and below the inspector's slot area:
 // header, screen title, chips, inspector title and buttons.
 const inspectorChrome = 470
+
+// showLayer shows the guessed pad layer under the drawing in plain mode. UI goroutine.
+func (t *profilesTab) showLayer(li layerInfo) {
+	if li.Text == "" || t.gestureMode {
+		t.layerLb.Hide()
+		return
+	}
+	t.layerLb.SetText(li.Text + " · the side button changes it")
+	t.layerLb.Show()
+}

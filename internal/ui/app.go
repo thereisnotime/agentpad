@@ -133,9 +133,10 @@ type appUI struct {
 	pillPad    *pill
 	pillAgents *pill
 	pillRecv   *pill
-	pillConfig *pill  // settings.yaml problem, hidden when fine
-	configErr  error  // last settings error shown in pillConfig
-	profileSig string // profiles dir signature last loaded
+	pillConfig *pill     // settings.yaml problem, hidden when fine
+	padLayer   layerInfo // guessed pad layer (plain mode)
+	configErr  error     // last settings error shown in pillConfig
+	profileSig string    // profiles dir signature last loaded
 	toasts     *toaster
 	nav        [][2]*navItem
 	screens    *fyne.Container
@@ -231,6 +232,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 		Unexpected: func(code uint16) {
 			u.post(func() { u.profiles.showMismatch(vkbd.KeyName(code)) })
 		},
+		Layer: func(li layerInfo) { u.post(func() { u.showLayer(li) }) },
 	})
 	u.liveJobs = make(chan func(), liveQueue)
 	u.liveQuit = make(chan struct{})
@@ -330,7 +332,10 @@ func (u *appUI) start() {
 		go u.readInput(u.deps.Input)
 	}
 	u.started.Store(true)
-	u.setLiveProfile(u.activeProfile())
+	// assume the pad holds what Apply would write for the active profile
+	act := u.activeProfile()
+	u.live.SetLayers(profile.Layers(replaceProfile(u.profiles.profiles, act), act.Name))
+	u.setLiveProfile(act)
 	if u.prefs.Mode() == ModeGesture {
 		u.setMode(ModeGesture)
 	}
@@ -417,7 +422,7 @@ func (u *appUI) showDevice(d pad.Device, err error) {
 	if err != nil {
 		u.pillPad.set(colorIdle, "No pad")
 	} else {
-		u.pillPad.set(colorSuccess, fmt.Sprintf("Pad %04x", d.ProductID))
+		u.pillPad.set(colorSuccess, u.padPillText(d.ProductID))
 		if d.ProductID != prevPID && ledFamily(d.ProductID) != ledFamily(u.ledProduct(prevPID)) {
 			u.loadLEDPolicy(d.ProductID)
 		}
@@ -546,6 +551,8 @@ func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func
 	u.dev.Upload(doc, func(err error) {
 		fyne.Do(func() {
 			if err == nil {
+				u.live.SetLayers(layers)
+				u.live.ResetLayer() // Apply leaves the pad on layer 1
 				u.prefs.SetActiveProfile(p.Name)
 				u.tray.rebuild()
 				u.setLiveProfile(p)
@@ -780,6 +787,9 @@ func (u *appUI) setMode(m Mode) {
 		return
 	}
 	doc := u.plainDoc()
+	act := u.activeProfile()
+	u.live.SetLayers(profile.Layers(replaceProfile(u.profiles.profiles, act), act.Name))
+	u.live.ResetLayer()
 	u.liveDo(func() {
 		err := u.live.EnterPlain(doc)
 		u.post(func() {
@@ -901,4 +911,22 @@ func (u *appUI) jumpSession(s events.Session) {
 		kind, msg := jumpToast(s, rep)
 		u.post(func() { u.toasts.show(kind, msg) })
 	}()
+}
+
+// showLayer reflects the guessed pad layer. UI goroutine.
+func (u *appUI) showLayer(li layerInfo) {
+	u.padLayer = li
+	u.profiles.showLayer(li)
+	if u.deviceErr == nil {
+		u.pillPad.set(colorSuccess, u.padPillText(u.device.ProductID))
+	}
+}
+
+// padPillText is "Pad 8890", plus the layer when it is not layer 1.
+func (u *appUI) padPillText(pid uint16) string {
+	s := fmt.Sprintf("Pad %04x", pid)
+	if u.padLayer.Short != "" && u.mode != ModeGesture {
+		s += " · " + u.padLayer.Short
+	}
+	return s
 }

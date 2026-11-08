@@ -82,7 +82,9 @@ func newSettingsCard(u *appUI) fyne.CanvasObject {
 	s.restoreBtn.Hide()
 	sub := "Everything lives in settings.yaml and profiles/. Export it to another machine, or import a bundle with a preview first."
 	if u.files == nil {
-		sub = "settings.yaml could not be opened, so export and import are off. Preferences are kept by the desktop toolkit for now."
+		if u.deps.SettingsWarning != "" {
+			sub = "settings.yaml could not be opened, so export and import are off. Preferences are kept by the desktop toolkit for now."
+		}
 		for _, b := range []*widget.Button{export, imp, backups, folder} {
 			b.Disable()
 		}
