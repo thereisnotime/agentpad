@@ -717,17 +717,16 @@ func TestAppJumpFromCardAndTray(t *testing.T) {
 	if m := trayModel(u.tray.state()); u.tray.desk != nil && m[1].Label != "Jump to waiting agent (2)" {
 		t.Errorf("tray label %q", m[1].Label)
 	}
-	u.jumpNext()
-	u.jumpNext()
-	u.jumpNext()
+	var order []string
+	for range 3 {
+		u.jumpNext()
+		order = append(order, u.lastJump)
+	}
+	if !slices.Equal(order, []string{"claude/a", "claude/b", "claude/a"}) {
+		t.Errorf("jump cycles oldest first: %q", order)
+	}
 	u.sessions.cards[1].jumpBtn.OnTapped()
 	q.until(t, "jumps", func() bool { j.mu.Lock(); defer j.mu.Unlock(); return len(j.jumps) == 4 })
-	j.mu.Lock()
-	got := slices.Clone(j.jumps[:3])
-	j.mu.Unlock()
-	if !slices.Equal(got, []string{"claude/a", "claude/b", "claude/a"}) {
-		t.Errorf("jump cycles oldest first: %q", got)
-	}
 	u.onAgentpadAction(profile.ActionJump)
 	q.until(t, "pad jump", func() bool { j.mu.Lock(); defer j.mu.Unlock(); return len(j.jumps) == 5 })
 	q.until(t, "toast", func() bool {
