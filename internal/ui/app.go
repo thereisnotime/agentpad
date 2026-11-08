@@ -129,7 +129,8 @@ func (u *appUI) start() {
 	u.srv = events.NewServer(u.deps.Addr, u.onEvent)
 	if err := u.srv.Start(); err != nil {
 		u.srv = nil
-		dialog.ShowError(fmt.Errorf("could not start the event receiver on %s (is agentpad already running?)\n\n%w\n\nLive agent events are disabled.", u.deps.Addr, err), u.win)
+		dialog.ShowInformation("Live events disabled",
+			fmt.Sprintf("Could not start the event receiver on %s. Is agentpad already running?\n\n%v", u.deps.Addr, err), u.win)
 	}
 
 	u.aggregateChanged()
