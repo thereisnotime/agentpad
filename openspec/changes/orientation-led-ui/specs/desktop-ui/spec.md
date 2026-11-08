@@ -20,3 +20,17 @@ The profile editor SHALL draw the pad in the configured orientation and let the 
 #### Scenario: Rotate
 - **WHEN** the user rotates the pad clockwise in the editor
 - **THEN** the drawing shows the keys stacked vertically with the knob below and the orientation is saved
+
+### Requirement: Live input feedback
+When a live pad input source is configured and the window is visible, the profile editor SHALL animate the drawn control that was pressed or turned and show the last input below the pad.
+
+#### Scenario: Knob turn
+- **WHEN** the user turns the knob clockwise by one detent
+- **THEN** the knob indicator ticks clockwise, the turn chip flashes and the caption reads "knob ↻"
+
+### Requirement: Bug reports from the app
+The About screen SHALL open a prefilled GitHub bug report with the app version, OS and pad, and SHALL offer the same diagnostics as copyable text.
+
+#### Scenario: Report a bug
+- **WHEN** the user presses "Report a bug"
+- **THEN** the browser opens the bug template with version, OS and pad filled in
