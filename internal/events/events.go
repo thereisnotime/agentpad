@@ -38,6 +38,7 @@ type Event struct {
 	Cwd       string          `json:"cwd,omitempty"`
 	Message   string          `json:"message,omitempty"`
 	Raw       json.RawMessage `json:"raw,omitempty"`
+	Origin    *Origin         `json:"origin,omitempty"` // where the agent runs (v2 hooks only)
 }
 
 // State is a session or aggregate state.
@@ -57,4 +58,11 @@ type Session struct {
 	State     State
 	LastTool  string
 	LastEvent time.Time
+	// Origin is the latest non-empty origin seen for the session.
+	Origin Origin
+	// WaitingSince is when the session entered StateAttention; zero otherwise.
+	WaitingSince time.Time
 }
+
+// Key returns the tracker key "agent/session_id".
+func (s Session) Key() string { return s.Agent + "/" + s.SessionID }

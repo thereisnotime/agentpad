@@ -46,12 +46,27 @@ func CodexSnippet(bin string) string {
 
 // OpenCodePlugin returns a JS plugin for ~/.config/opencode/plugins/agentpad.js.
 func OpenCodePlugin(addr string) string {
-	url, _ := json.Marshal("http://" + addr + "/v1/events/opencode")
+	url, _ := json.Marshal("http://" + addr + "/v2/events/opencode")
 	return `// agentpad OpenCode plugin.
 // Save as ~/.config/opencode/plugins/agentpad.js (global) or
 // .opencode/plugins/agentpad.js (per project). OpenCode loads it on start.
 // Forwards every bus event to the local agentpad receiver; never throws.
+// The origin (terminal tab, multiplexer pane, pid) lets agentpad jump back here.
 const AGENTPAD_URL = ` + string(url) + `
+
+const env = process.env
+const ORIGIN = Object.fromEntries(Object.entries({
+  agent_pid: process.pid,
+  term_program: env.TERM_PROGRAM,
+  window_id: env.WINDOWID,
+  konsole_service: env.KONSOLE_DBUS_SERVICE,
+  konsole_window: env.KONSOLE_DBUS_WINDOW,
+  konsole_session: env.KONSOLE_DBUS_SESSION,
+  zellij_session: env.ZELLIJ_SESSION_NAME,
+  zellij_pane: env.ZELLIJ_PANE_ID,
+  tmux: env.TMUX,
+  tmux_pane: env.TMUX_PANE,
+}).filter(([, v]) => v))
 
 export const AgentpadPlugin = async () => {
   return {
@@ -60,7 +75,7 @@ export const AgentpadPlugin = async () => {
         await fetch(AGENTPAD_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(event),
+          body: JSON.stringify({ payload: event, origin: ORIGIN }),
           signal: AbortSignal.timeout(300),
         })
       } catch {

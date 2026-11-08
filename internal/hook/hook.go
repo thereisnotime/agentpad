@@ -3,6 +3,7 @@ package hook
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thereisnotime/agentpad/internal/config"
+	"github.com/thereisnotime/agentpad/internal/events"
 )
 
 const (
@@ -18,12 +20,19 @@ const (
 	postTimeout  = 300 * time.Millisecond
 )
 
-// stderr is where usage goes; swapped in tests.
-var stderr io.Writer = os.Stderr
+// Swapped in tests.
+var (
+	stderr   io.Writer = os.Stderr
+	environ            = os.Environ
+	procRoot           = "/proc"
+	selfPID            = os.Getpid
+)
 
 // Run forwards one agent payload to the receiver at addr. claude/opencode read
-// stdin; codex uses the last argument. POST timeout 300ms. Always returns 0
-// for known agents; returns 2 with usage on stderr for an unknown agent.
+// stdin; codex uses the last argument. The payload is wrapped in an
+// events.Envelope together with the captured events.Origin and posted to
+// /v2/events/<agent>. POST timeout 300ms. Always returns 0 for known agents;
+// returns 2 with usage on stderr for an unknown agent.
 func Run(agent string, args []string, stdin io.Reader, addr string) int {
 	switch agent {
 	case "claude", "opencode", "codex":
@@ -42,8 +51,12 @@ func Run(agent string, args []string, stdin io.Reader, addr string) int {
 		payload = readStdin(stdin)
 	}
 
+	body, err := json.Marshal(events.NewEnvelope(payload, CaptureOrigin(agent, environ(), procRoot, selfPID())))
+	if err != nil {
+		return 0
+	}
 	client := &http.Client{Timeout: postTimeout}
-	resp, err := client.Post("http://"+addr+config.EventsPath+agent, "application/json", bytes.NewReader(payload))
+	resp, err := client.Post("http://"+addr+events.EventsV2Path+agent, "application/json", bytes.NewReader(body))
 	if err == nil {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()
