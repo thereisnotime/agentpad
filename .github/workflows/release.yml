@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: System deps (Fyne X11)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config libgl1-mesa-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+      - name: Build
+        run: |
+          mkdir -p dist/agentpad
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/agentpad/agentpad ./cmd/agentpad
+          cp LICENSE README.md dist/agentpad/
+          tar -C dist -czf "dist/agentpad_linux_${{ matrix.arch }}.tar.gz" agentpad
+          dist/agentpad/agentpad version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentpad_linux_${{ matrix.arch }}
+          path: dist/agentpad_linux_${{ matrix.arch }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum agentpad_linux_*.tar.gz > checksums.txt && cat checksums.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/agentpad_linux_*.tar.gz dist/checksums.txt \
+            --title "$GITHUB_REF_NAME" --generate-notes install.sh

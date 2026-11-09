@@ -3,6 +3,7 @@
 //	agentpad                 start the desktop app
 //	agentpad hook <agent>    forward an agent hook payload (claude|codex|opencode)
 //	agentpad version         print version
+//	agentpad udev-rules      print the udev rules (pad access, input, uinput)
 //	agentpad desktop-install install the .desktop file and icons (taskbar icon)
 //	agentpad desktop-remove  remove them again
 package main
@@ -12,6 +13,7 @@ import (
 	"os"
 
 	"github.com/thereisnotime/agentpad/internal/desktopentry"
+	"github.com/thereisnotime/agentpad/internal/setup"
 )
 
 var version = "dev"
@@ -23,6 +25,9 @@ func main() {
 			os.Exit(runHook(os.Args[2:]))
 		case "version", "--version", "-v":
 			fmt.Println("agentpad", version)
+			return
+		case "udev-rules":
+			fmt.Print(setup.UdevRules())
 			return
 		case "led-lab":
 			os.Exit(runLedLab(os.Args[2:]))
@@ -42,7 +47,7 @@ func main() {
 			}
 			return
 		case "help", "--help", "-h":
-			fmt.Println("usage: agentpad [hook <claude|codex|opencode> | version | desktop-install | desktop-remove]")
+			fmt.Println("usage: agentpad [hook <claude|codex|opencode> | version | udev-rules | desktop-install | desktop-remove | led-lab]")
 			return
 		}
 	}

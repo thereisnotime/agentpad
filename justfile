@@ -104,12 +104,7 @@ ci: lint test build
 # Show the udev rules: program the pad, read its input nodes and use /dev/uinput (gesture mode) without root
 [group('device')]
 udev-rule:
-    @printf '# agentpad: program the pad (ch57x-keyboard-tool)\n'
-    @printf 'SUBSYSTEM=="usb", ATTR{idVendor}=="1189", ATTR{idProduct}=="8890|8840|8842", TAG+="uaccess"\n'
-    @printf '# agentpad gesture mode: read and grab the pad input nodes\n'
-    @printf 'SUBSYSTEM=="input", ATTRS{idVendor}=="1189", ATTRS{idProduct}=="8890|8840|8842", TAG+="uaccess"\n'
-    @printf '# agentpad gesture mode: virtual keyboard\n'
-    @printf 'KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"\n'
+    @go run -tags "{{ tags }}" {{ pkg }} udev-rules
 
 # Install the udev rules (needs sudo)
 [group('device')]

@@ -96,3 +96,12 @@ func TestUdevRule(t *testing.T) {
 		t.Fatal("udev rule changed")
 	}
 }
+
+func TestUdevRulesComplete(t *testing.T) {
+	r := UdevRules()
+	for _, want := range []string{`SUBSYSTEM=="usb"`, `SUBSYSTEM=="input"`, `KERNEL=="uinput"`, `TAG+="uaccess"`} {
+		if !strings.Contains(r, want) {
+			t.Errorf("rules missing %q", want)
+		}
+	}
+}

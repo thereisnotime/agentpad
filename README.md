@@ -98,12 +98,25 @@ More screens in [docs/screenshots](docs/screenshots/).
 > Connect it through a **USB-C → USB-A adapter + USB-A → USB-C cable**. [Why and other fixes →](docs/hardware.md#usb-c-power-quirk)
 
 ```bash
-git clone git@github.com:thereisnotime/agentpad.git && cd agentpad
-just tool-install    # pad programming backend → ~/.local/bin
-just udev-install    # lets your user program the pad (sudo)
-just install         # agentpad → ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/thereisnotime/agentpad/main/install.sh | sh -s -- --udev
 agentpad
 ```
+
+This installs the latest release to `~/.local/bin` (checksum-verified), the pad programming backend
+(`ch57x-keyboard-tool`), the desktop entry, and with `--udev` the udev rules (asks for sudo; replug the pad after).
+Other options: `--version vX.Y.Z`, `--prefix DIR`, `--no-tool`, `--no-desktop`, `--uninstall`.
+Linux amd64 / arm64.
+
+<details>
+<summary>From source</summary>
+
+```bash
+git clone git@github.com:thereisnotime/agentpad.git && cd agentpad
+just tool-install    # pad programming backend → ~/.local/bin
+just udev-install    # lets your user program and read the pad (sudo)
+just install         # agentpad → ~/.local/bin
+```
+</details>
 
 Then in the app:
 

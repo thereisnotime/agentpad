@@ -92,6 +92,18 @@ func UdevRule() string {
 	return `SUBSYSTEM=="usb", ATTR{idVendor}=="1189", ATTR{idProduct}=="8890|8840|8842", TAG+="uaccess"`
 }
 
+// UdevRules returns the complete rule file: programming the pad, gesture mode
+// and live input (pad input nodes) and the virtual keyboard (uinput).
+func UdevRules() string {
+	return `# agentpad: program the pad (ch57x-keyboard-tool, LED lab)
+` + UdevRule() + `
+# agentpad gesture mode and live input: read and grab the pad input nodes
+SUBSYSTEM=="input", ATTRS{idVendor}=="1189", ATTRS{idProduct}=="8890|8840|8842", TAG+="uaccess"
+# agentpad gesture mode: virtual keyboard
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
+`
+}
+
 // shellQuote single-quotes s for sh when it contains anything unusual.
 func shellQuote(s string) string {
 	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+:@%=") == "" {
