@@ -62,11 +62,22 @@ type liveCallbacks struct {
 	Status  func(liveStatus)    // status changed
 	// Agentpad handles reserved actions ("agentpad:jump") instead of typing them.
 	Agentpad func(action string)
+	// Script runs a user script: a run:<name> gesture action (gesture
+	// mode) or a press of a run:<name> control on the guessed layer
+	// (plain mode).
+	Script func(name string, t scriptTrigger)
 	// Unexpected reports a pressed key no pad layer can produce: the pad
 	// holds a different mapping (plain mode only).
 	Unexpected func(code uint16)
 	// Layer reports a new guess of the pad's layer (plain mode only).
 	Layer func(layerInfo)
+}
+
+// scriptTrigger is the pad input that asked for a script.
+type scriptTrigger struct {
+	Control string // key1, knob-cw, key1+key3, ...
+	Gesture string // gesture kind; "" in plain mode
+	Layer   int    // 1-based pad layer in plain mode, 0 in gesture mode
 }
 
 type liveController struct {
@@ -208,10 +219,17 @@ func (c *liveController) ResetLayer() {
 // mapCode maps a raw keycode to a control on the guessed layer. On a press
 // it updates the guess; explained is false when no layer sends code.
 func (c *liveController) mapCode(code uint16, down bool) (ctl gesture.Control, explained bool, info *layerInfo) {
+	ctl, explained, info, _, _ = c.mapCodeScript(code, down)
+	return ctl, explained, info
+}
+
+// mapCodeScript is mapCode plus the script the control runs on the guessed
+// layer (and that layer, 1-based).
+func (c *liveController) mapCodeScript(code uint16, down bool) (ctl gesture.Control, explained bool, info *layerInfo, script string, layer int) {
 	c.layerMu.Lock()
 	defer c.layerMu.Unlock()
 	if len(c.layers) == 0 {
-		return "", true, nil // nothing known yet
+		return "", true, nil, "", 0 // nothing known yet
 	}
 	explained = true
 	if down {
@@ -224,7 +242,7 @@ func (c *liveController) mapCode(code uint16, down bool) (ctl gesture.Control, e
 		c.guess = next
 	}
 	ctl, _ = c.guess.control(c.layers, code)
-	return ctl, explained, info
+	return ctl, explained, info, c.guess.script(c.layers, ctl), c.guess.Cur + 1
 }
 
 // EnsureObserver starts plain-mode live input if it is not running. Called
@@ -255,9 +273,12 @@ func (c *liveController) startObserver() error {
 		for ev := range obs.Events() {
 			switch ev.Status {
 			case "":
-				ctl, explained, info := c.mapCode(ev.Code, ev.Down)
+				ctl, explained, info, script, layer := c.mapCodeScript(ev.Code, ev.Down)
 				if info != nil && c.cb.Layer != nil {
 					c.cb.Layer(*info)
+				}
+				if script != "" && ev.Down && c.cb.Script != nil {
+					c.cb.Script(script, scriptTrigger{Control: string(ctl), Layer: layer})
 				}
 				if ctl == "" {
 					if ev.Down && !explained && c.cb.Unexpected != nil {
@@ -304,7 +325,7 @@ func (c *liveController) EnterGesture(cfg gesture.Config) (string, error) {
 		return "", err
 	}
 	c.stopObserver()
-	eng := gesture.NewEngine(c.dev.Grab, agentpadEmitter{inner: em, handle: c.cb.Agentpad}, cfg)
+	eng := gesture.NewEngine(c.dev.Grab, agentpadEmitter{inner: em, handle: c.cb.Agentpad, script: c.cb.Script}, cfg)
 	eng.SetProfile(c.prof)
 	if err := eng.Start(context.Background()); err != nil {
 		_ = em.Close()
@@ -417,13 +438,27 @@ func emitterBackend(em vkbd.Emitter) string {
 }
 
 // agentpadEmitter types actions through inner, except the reserved
-// "agentpad:*" actions, which go to handle instead.
+// "agentpad:*" actions, which go to handle, and run:<name>, which goes to
+// script.
 type agentpadEmitter struct {
 	inner  gesture.Emitter
 	handle func(action string)
+	script func(name string, t scriptTrigger)
 }
 
 func (e agentpadEmitter) Emit(action string) error {
+	return e.EmitGesture(gesture.Gesture{}, action)
+}
+
+// EmitGesture implements gesture.GestureEmitter so scripts learn the gesture.
+func (e agentpadEmitter) EmitGesture(g gesture.Gesture, action string) error {
+	if name, ok := profile.ScriptName(action); ok {
+		if e.script == nil {
+			return fmt.Errorf("%s is not available here", action)
+		}
+		e.script(name, scriptTrigger{Control: string(g.Control), Gesture: string(g.Kind)})
+		return nil
+	}
 	if !strings.HasPrefix(action, profile.AgentpadPrefix) {
 		return e.inner.Emit(action)
 	}

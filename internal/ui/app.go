@@ -23,6 +23,7 @@ import (
 	"github.com/thereisnotime/agentpad/internal/notify"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/scripts"
 	"github.com/thereisnotime/agentpad/internal/settings"
 	"github.com/thereisnotime/agentpad/internal/vkbd"
 )
@@ -54,6 +55,7 @@ const (
 	screenSessions
 	screenLog
 	screenSetup
+	screenScripts
 	screenAbout
 )
 
@@ -64,7 +66,10 @@ type Deps struct {
 	Bin     string          // absolute agentpad path used in setup snippets
 	Version string
 	LogPath string // event log; empty means <StateDir>/events.jsonl
-	Addr    string // event receiver address; empty means config.ListenAddr
+	// ScriptsLog is the script run log; empty means scripts.jsonl next to
+	// the event log.
+	ScriptsLog string
+	Addr       string // event receiver address; empty means config.ListenAddr
 	// Input is the live pad input used for on-screen feedback; nil disables it.
 	Input PadInput
 	// Settings stores user preferences; nil means Fyne preferences. A
@@ -120,6 +125,11 @@ type appUI struct {
 	liveQuit chan struct{}
 	liveDone chan struct{}
 	notifier *attentionNotifier
+	runner   *scripts.Runner
+	hooks    *scripts.Hooks
+	// runNow are Run now runs waiting for their toast. UI goroutine.
+	runNow   map[scripts.RunID]bool
+	padKnown bool // pad presence last reported to hooks
 	jumpMu   sync.Mutex
 	lastJump string // key of the session jumped to last
 
@@ -149,6 +159,7 @@ type appUI struct {
 	profiles *profilesTab
 	sessions *sessionsTab
 	logView  *logTab
+	scripts  *scriptsTab
 	tray     *tray
 }
 
@@ -189,6 +200,9 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	if d.Addr == "" {
 		d.Addr = config.ListenAddr
 	}
+	if d.ScriptsLog == "" {
+		d.ScriptsLog = filepath.Join(filepath.Dir(d.LogPath), "scripts.jsonl")
+	}
 	if d.Version == "" {
 		d.Version = "dev"
 	}
@@ -220,6 +234,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.dev = newDeviceWorker(u.writer, u.led, deviceQueue)
 	u.dev.start()
 	u.tracker = events.NewTracker()
+	u.initScripts()
 	live := d.Live
 	if d.Input != nil {
 		live.Disabled = true // the given input replaces the observer
@@ -229,6 +244,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 		Gesture:  u.onGesture,
 		Status:   func(st liveStatus) { u.post(func() { u.showLiveStatus(st) }) },
 		Agentpad: func(a string) { u.post(func() { u.onAgentpadAction(a) }) },
+		Script:   u.runPadScript,
 		Unexpected: func(code uint16) {
 			u.post(func() { u.profiles.showMismatch(vkbd.KeyName(code)) })
 		},
@@ -264,6 +280,7 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 	u.profiles = newProfilesTab(u)
 	u.sessions = newSessionsTab(u)
 	u.logView = newLogTab(u)
+	u.scripts = newScriptsTab(u)
 
 	u.win.SetContent(u.buildShell([]navScreen{
 		{"Pad", theme.ComputerIcon(), u.pad.content},
@@ -271,10 +288,11 @@ func newAppUI(a fyne.App, d Deps) *appUI {
 		{"Sessions", theme.ListIcon(), u.sessions.content},
 		{"Log", theme.HistoryIcon(), u.logView.content},
 		{"Setup", theme.SettingsIcon(), newSetupTab(u)},
+		{"Scripts", theme.MediaPlayIcon(), u.scripts.content},
 		{"About", theme.InfoIcon(), newAboutTab(u)},
 	}))
 
-	// Dev only: AGENTPAD_SCREEN=pad|profiles|sessions|log|setup|about picks the first screen.
+	// Dev only: AGENTPAD_SCREEN=pad|profiles|sessions|log|setup|scripts|about picks the first screen.
 	if i := screenIndex(os.Getenv("AGENTPAD_SCREEN")); i >= 0 {
 		u.navigate(i)
 	}
@@ -387,6 +405,7 @@ func (u *appUI) loop() {
 				u.followLED()
 				u.notifyWaiting()
 			}
+			u.forgetPrunedSessions()
 			if st := u.live.Status(); st.Mode == ModePlain && !st.Reading && !u.deps.Live.Disabled {
 				u.tryLive(func() { _ = u.live.EnsureObserver() })
 			}
@@ -419,6 +438,7 @@ func (u *appUI) detect() {
 func (u *appUI) showDevice(d pad.Device, err error) {
 	prevPID := u.device.ProductID
 	u.device, u.deviceErr = d, err
+	u.padPresenceHook(d, err == nil)
 	if err != nil {
 		u.pillPad.set(colorIdle, "No pad")
 	} else {
@@ -444,10 +464,19 @@ func (u *appUI) onEvent(e events.Event) {
 	if u.log != nil {
 		_ = u.log.Append(e)
 	}
+	var ended events.Session // session_end hooks still get the session's details
+	if e.Kind == events.KindSessionEnd {
+		ended, _ = findSession(u.tracker.Sessions(), e.Agent, e.SessionID)
+	}
 	changed := u.tracker.Apply(e)
 	if changed {
 		u.followLED()
 	}
+	after, found := findSession(u.tracker.Sessions(), e.Agent, e.SessionID)
+	if !found {
+		after = ended
+	}
+	sessionHooks(u.hooks, e, after, found)
 	u.notifyWaiting()
 	fyne.Do(func() {
 		u.logView.add(e)
@@ -520,6 +549,7 @@ func (u *appUI) settingsChanged() {
 	if m := u.prefs.Mode(); m != u.mode && !u.modeBusy && u.started.Load() {
 		u.setMode(m)
 	}
+	u.scriptsChanged()
 	u.tray.rebuild()
 }
 
@@ -545,6 +575,7 @@ func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func
 		u.prefs.SetActiveProfile(p.Name)
 		u.tray.rebuild()
 		u.setLiveProfile(p)
+		u.fireHook(scripts.Payload{Event: scripts.EventProfileApplied, Profile: p.Name})
 		done(nil, nil)
 		return
 	}
@@ -557,6 +588,7 @@ func (u *appUI) applyProfile(p profile.Profile, all []profile.Profile, done func
 				u.tray.rebuild()
 				u.setLiveProfile(p)
 				u.profiles.clearMismatch()
+				u.fireHook(scripts.Payload{Event: scripts.EventProfileApplied, Profile: p.Name})
 			}
 			done(names, err)
 		})
@@ -650,6 +682,10 @@ func (u *appUI) shutdown() {
 		}
 		u.dev.Close()
 		u.led.Close()
+		u.runner.Close()
+		if u.files != nil {
+			profile.SetScriptResolver(nil)
+		}
 		if u.log != nil {
 			_ = u.log.Close()
 		}
@@ -808,6 +844,9 @@ func (u *appUI) setMode(m Mode) {
 
 // modeChanged reflects the applied mode everywhere. UI goroutine.
 func (u *appUI) modeChanged(m Mode) {
+	if m != u.mode {
+		u.fireHook(scripts.Payload{Event: scripts.EventModeChanged, Mode: string(m)})
+	}
 	u.mode = m
 	u.pad.showMode(m, u.live.Status())
 	u.profiles.setMode(m)
@@ -834,6 +873,8 @@ func (u *appUI) onLiveInput(ev PadInputEvent) {
 func (u *appUI) onGesture(ev gesture.Event) {
 	it := gestureLine(ev)
 	u.post(func() { u.profiles.monitorAdd(it) })
+	u.fireHook(scripts.Payload{Event: scripts.EventGesture, Control: string(ev.Gesture.Control),
+		Gesture: string(ev.Gesture.Kind), Action: ev.Action})
 }
 
 // onAgentpadAction runs a reserved action from gesture mode. UI goroutine.
@@ -908,6 +949,7 @@ func (u *appUI) jumpSession(s events.Session) {
 		ctx, cancel := context.WithTimeout(context.Background(), jumpTimeout)
 		defer cancel()
 		rep := u.deps.Jumper.Jump(ctx, s)
+		u.fireHook(scripts.Payload{Event: scripts.EventJump, Agent: s.Agent, SessionID: s.SessionID, Cwd: s.Cwd, Tool: s.LastTool})
 		kind, msg := jumpToast(s, rep)
 		u.post(func() { u.toasts.show(kind, msg) })
 	}()

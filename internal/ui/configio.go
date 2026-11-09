@@ -40,8 +40,10 @@ type previewGroup struct {
 }
 
 // planPreview turns an import plan into grouped rows: Settings, Profiles,
-// Rules (adds, then changes, then removals, each in plan order), then
-// Warnings. Empty groups are left out.
+// Rules, Scripts, Hooks (adds, then changes, then removals, each in plan
+// order), then Warnings. Empty groups are left out. Dangerous changes
+// (scripts and hooks that would run commands) are not here: see
+// consentRows.
 func planPreview(p *settings.Plan) []previewGroup {
 	if p == nil {
 		return nil
@@ -50,13 +52,15 @@ func planPreview(p *settings.Plan) []previewGroup {
 		{settings.AreaSettings, "Settings"},
 		{settings.AreaProfile, "Profiles"},
 		{settings.AreaRules, "Rules"},
+		{settings.AreaScripts, "Scripts"},
+		{settings.AreaHooks, "Hooks"},
 	}
 	var out []previewGroup
 	for _, a := range areas {
 		var rows []previewRow
 		for _, k := range []settings.ChangeKind{settings.Add, settings.Modify, settings.Remove} {
 			for _, c := range p.Changes {
-				if c.Area == a.area && c.Kind == k {
+				if c.Area == a.area && c.Kind == k && !c.Dangerous {
 					rows = append(rows, changeRow(c))
 				}
 			}
@@ -96,6 +100,19 @@ func changeRow(c settings.Change) previewRow {
 			return previewRow{Kind: rowRemove, Text: c.Path, Detail: "profile is deleted"}
 		}
 		return previewRow{Kind: rowChange, Text: c.Path, Detail: "keys or description change"}
+	case settings.AreaScripts:
+		switch c.Kind {
+		case settings.Add:
+			return previewRow{Kind: rowAdd, Text: "script " + c.Path, Detail: c.New}
+		case settings.Remove:
+			return previewRow{Kind: rowRemove, Text: "script " + c.Path, Detail: "removed (was " + c.Old + ")"}
+		}
+		return previewRow{Kind: rowChange, Text: "script " + c.Path, Detail: c.Old + " → " + c.New}
+	case settings.AreaHooks:
+		if c.Kind == settings.Remove {
+			return previewRow{Kind: rowRemove, Text: "hook " + c.Path, Detail: "removed"}
+		}
+		return previewRow{Kind: rowAdd, Text: "hook " + c.Path, Detail: "runs the script on this event"}
 	}
 	kinds := map[settings.ChangeKind]rowKind{settings.Add: rowAdd, settings.Modify: rowChange, settings.Remove: rowRemove}
 	verb := map[settings.ChangeKind]string{settings.Add: "added", settings.Modify: "replaced", settings.Remove: "removed"}
@@ -108,6 +125,33 @@ func display(v string) string {
 	}
 	return v
 }
+
+// consentRow is one dangerous change, ticked by the user to import it.
+type consentRow struct {
+	Change settings.Change
+	Row    previewRow
+}
+
+// consentRows lists the plan's dangerous changes for the "Runs commands"
+// section; all start unticked.
+func consentRows(p *settings.Plan) []consentRow {
+	if p == nil {
+		return nil
+	}
+	var out []consentRow
+	for _, c := range p.Dangerous() {
+		out = append(out, consentRow{Change: c, Row: changeRow(c)})
+	}
+	return out
+}
+
+// consentPlan is the plan to apply given the ticked dangerous changes
+// (keyed by Change.Area + "/" + Change.Path).
+func consentPlan(p *settings.Plan, ticked map[string]bool) *settings.Plan {
+	return p.Consent(func(c settings.Change) bool { return ticked[consentKey(c)] })
+}
+
+func consentKey(c settings.Change) string { return c.Area + "/" + c.Path }
 
 // planSummary is the one-line count above the preview.
 func planSummary(p *settings.Plan) string {

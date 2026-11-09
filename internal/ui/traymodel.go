@@ -17,6 +17,7 @@ const (
 	trayFollow
 	trayMode
 	trayJump
+	trayScript
 	trayShow
 	trayQuit
 )
@@ -25,7 +26,7 @@ const (
 type trayItem struct {
 	Label     string
 	Action    trayAction
-	Arg       string // profile name or orientation
+	Arg       string // profile name, orientation, mode or script name
 	Checked   bool
 	Disabled  bool
 	Separator bool
@@ -41,12 +42,13 @@ type trayState struct {
 	Orient   profile.Orientation
 	Follow   bool
 	Mode     Mode
-	Waiting  int // sessions waiting for the user
+	Waiting  int      // sessions waiting for the user
+	Scripts  []string // user scripts (Run script ▸), sorted
 }
 
 // trayModel builds the tray menu: status · Jump to waiting agent · separator ·
-// Mode ▸ · Profile ▸ · Orientation ▸ · LED follows agents · separator ·
-// Show window · Quit.
+// Mode ▸ · Profile ▸ · Orientation ▸ · Run script ▸ (when there are
+// scripts) · LED follows agents · separator · Show window · Quit.
 func trayModel(s trayState) []trayItem {
 	profiles := make([]trayItem, 0, len(s.Profiles))
 	for _, name := range s.Profiles {
@@ -63,18 +65,27 @@ func trayModel(s trayState) []trayItem {
 		{Label: "Plain", Action: trayMode, Arg: string(ModePlain), Checked: s.Mode != ModeGesture},
 		{Label: "Gesture", Action: trayMode, Arg: string(ModeGesture), Checked: s.Mode == ModeGesture},
 	}
-	return []trayItem{
+	items := []trayItem{
 		{Label: trayStatus(s.Agents), Disabled: true},
 		{Label: jumpLabel(s.Waiting), Action: trayJump, Disabled: s.Waiting == 0},
 		{Separator: true},
 		{Label: "Mode", Children: modes},
 		{Label: "Profile", Children: profiles},
 		{Label: "Orientation", Children: orients},
+	}
+	if len(s.Scripts) > 0 {
+		run := make([]trayItem, 0, len(s.Scripts))
+		for _, name := range s.Scripts {
+			run = append(run, trayItem{Label: name, Action: trayScript, Arg: name})
+		}
+		items = append(items, trayItem{Label: "Run script", Children: run})
+	}
+	return append(items, []trayItem{
 		{Label: "LED follows agents", Action: trayFollow, Checked: s.Follow},
 		{Separator: true},
 		{Label: "Show window", Action: trayShow},
 		{Label: "Quit", Action: trayQuit, Quit: true},
-	}
+	}...)
 }
 
 func trayStatus(s events.State) string {

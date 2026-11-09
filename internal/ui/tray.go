@@ -45,6 +45,7 @@ func (t *tray) state() trayState {
 	for _, p := range t.u.profiles.profiles {
 		s.Profiles = append(s.Profiles, p.Name)
 	}
+	s.Scripts = t.u.scriptNames()
 	return s
 }
 
@@ -97,6 +98,8 @@ func (t *tray) do(it trayItem) {
 		u.setMode(ParseMode(it.Arg))
 	case trayJump:
 		u.jumpNext()
+	case trayScript:
+		u.runScriptNow(it.Arg)
 	case trayShow:
 		u.visible.Store(true)
 		u.win.Show()

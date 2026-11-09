@@ -47,7 +47,7 @@ func parseWindowSize(s string) (w, h float32, ok bool) {
 }
 
 // screenNames are the navigation screens in order (lower case).
-var screenNames = []string{"pad", "profiles", "sessions", "log", "setup", "about"}
+var screenNames = []string{"pad", "profiles", "sessions", "log", "setup", "scripts", "about"}
 
 // screenIndex returns the index of a screen name, or -1.
 func screenIndex(name string) int {

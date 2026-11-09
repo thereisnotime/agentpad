@@ -27,6 +27,14 @@ type Emitter interface {
 	Emit(action string) error
 }
 
+// GestureEmitter is an Emitter that also wants to know which gesture an
+// action belongs to (e.g. to pass it to a script). The engine calls
+// EmitGesture instead of Emit when the emitter implements it.
+type GestureEmitter interface {
+	Emitter
+	EmitGesture(g Gesture, action string) error
+}
+
 // EvdevSource opens and grabs every input node of the pad.
 func EvdevSource() Opener {
 	return func() (Source, error) {
@@ -283,7 +291,11 @@ func (e *Engine) dispatch(gs []Gesture) {
 		ev := Event{Time: g.Time, Gesture: g}
 		if a, ok := e.action(g.Control, g.Kind); ok {
 			ev.Action = a
-			ev.Err = e.em.Emit(a)
+			if ge, ok := e.em.(GestureEmitter); ok {
+				ev.Err = ge.EmitGesture(g, a)
+			} else {
+				ev.Err = e.em.Emit(a)
+			}
 		}
 		e.send(ev)
 	}

@@ -19,18 +19,28 @@ type layerMap struct {
 	Name     string
 	Map      gesture.KeyMap  // main keycode -> control
 	Expected map[uint16]bool // every code the layer can send (modifiers too)
+	// Scripts are the controls whose action is run:<name> -> script; the
+	// pad sends them as F19..F24 (profile.PlainLayers).
+	Scripts map[gesture.Control]string
 }
 
-// buildLayerMaps computes the plain key maps of layers (layer 1 first).
+// buildLayerMaps computes the plain key maps of layers (layer 1 first),
+// with run:<name> controls on the spare keys Apply programs for them.
 // Layers whose map can't be built are kept with empty maps.
 func buildLayerMaps(layers []profile.Profile, o profile.Orientation) []layerMap {
 	out := make([]layerMap, len(layers))
-	for i, p := range layers {
+	programmed := profile.PlainLayers(layers)
+	scripts := profile.ScriptControls(layers)
+	for i, p := range programmed {
 		km, rep, err := gesture.PlainKeyMap(p, o)
 		if err != nil {
 			km, rep.Expected = gesture.KeyMap{}, map[uint16]bool{}
 		}
-		out[i] = layerMap{Name: p.Name, Map: km, Expected: rep.Expected}
+		sc := make(map[gesture.Control]string, len(scripts[i]))
+		for c, name := range scripts[i] {
+			sc[gesture.Control(c)] = name
+		}
+		out[i] = layerMap{Name: p.Name, Map: km, Expected: rep.Expected, Scripts: sc}
 	}
 	return out
 }
@@ -88,6 +98,14 @@ func (g layerGuess) press(maps []layerMap, code uint16) (next layerGuess, explai
 		next.Cur = keep[0]
 	}
 	return next, true
+}
+
+// script is the script control ctl runs on the guessed layer ("" for none).
+func (g layerGuess) script(maps []layerMap, ctl gesture.Control) string {
+	if g.Cur >= len(maps) || ctl == "" {
+		return ""
+	}
+	return maps[g.Cur].Scripts[ctl]
 }
 
 // control is the control code is drawn on in the guessed layer.

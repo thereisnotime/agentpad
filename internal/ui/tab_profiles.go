@@ -65,6 +65,8 @@ type profilesTab struct {
 	layerLb *widget.Label // "Pad on layer 2 · codex" (plain mode)
 	chords  *collapsible  // gesture mode: the three chord slots
 	picks   *collapsible  // quick picks
+	pickRow *fyne.Container
+	runBtn  *widget.Button // Run script ▸
 }
 
 // monitorLines is how many lines the Recognised card shows before scrolling.
@@ -116,12 +118,12 @@ func newProfilesTab(u *appUI) *profilesTab {
 	t.inspTitle = boldLabel("")
 	t.inspSub = secondary("")
 	t.slotsBox = container.NewVBox()
-	picks := chipRow()
-	for _, a := range quickPicks {
-		a := a
-		picks.Add(newChip(a, true, func() { t.quickPick(a) }))
-	}
-	t.picks = newCollapsible("Quick picks", true, picks)
+	t.pickRow = chipRow()
+	t.picks = newCollapsible("Quick picks", true, t.pickRow)
+	t.runBtn = widget.NewButtonWithIcon("Run script ▸", theme.MediaPlayIcon(), t.showRunMenu)
+	t.runBtn.Importance = widget.LowImportance
+	t.runBtn.Alignment = widget.ButtonAlignLeading
+	t.buildPicks()
 	t.chords = newCollapsible(sectionChords, false)
 	t.message = wrapLabel("")
 	t.message.Hide()
@@ -138,7 +140,7 @@ func newProfilesTab(u *appUI) *profilesTab {
 
 	// the slots scroll inside the inspector when taller than the window;
 	// title and buttons stay put
-	slots := cappedScroll(container.NewVBox(t.slotsBox, t.picks.content, t.message), t.inspectorLimit)
+	slots := cappedScroll(container.NewVBox(t.slotsBox, t.runBtn, t.picks.content, t.message), t.inspectorLimit)
 	inspector := surface(container.NewBorder(tight(t.inspTitle, t.inspSub),
 		container.NewVBox(widget.NewSeparator(), buttons), nil, nil, slots))
 
@@ -274,6 +276,7 @@ func (t *profilesTab) loadInspector() {
 		if s.ID != slotAction {
 			opts = gestureOptions()
 		}
+		opts = append(opts, scriptActions(t.u.scriptNames())...)
 		e := widget.NewSelectEntry(opts)
 		e.SetPlaceHolder(s.Placeholder)
 		e.SetText(getAction(t.draft, t.control, s.ID))
@@ -304,6 +307,59 @@ func (t *profilesTab) loadInspector() {
 
 // entry returns the editor of the active slot.
 func (t *profilesTab) entry() *widget.SelectEntry { return t.entries[t.activeSlot] }
+
+// buildPicks fills the quick picks: common keys plus run:<name> per script.
+func (t *profilesTab) buildPicks() {
+	t.pickRow.Objects = nil
+	for _, a := range inspectorPicks(t.u.scriptNames()) {
+		a := a
+		t.pickRow.Add(newChip(a, true, func() { t.quickPick(a) }))
+	}
+	t.pickRow.Refresh()
+	if len(t.u.scriptNames()) == 0 {
+		t.runBtn.Disable()
+	} else {
+		t.runBtn.Enable()
+	}
+}
+
+// showRunMenu lists the scripts; picking one puts run:<name> in the active slot.
+func (t *profilesTab) showRunMenu() {
+	names := t.u.scriptNames()
+	if len(names) == 0 {
+		t.u.toasts.show(toastInfo, "No scripts yet. Add one on the Scripts screen.")
+		return
+	}
+	items := make([]*fyne.MenuItem, 0, len(names)+2)
+	for _, n := range names {
+		a := profile.RunAction(n)
+		items = append(items, fyne.NewMenuItem(n, func() { t.quickPick(a) }))
+	}
+	items = append(items, fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Manage scripts…", func() { t.u.navigate(screenScripts) }))
+	c := fyne.CurrentApp().Driver().CanvasForObject(t.runBtn)
+	if c == nil {
+		return
+	}
+	widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), c, fyne.NewPos(0, t.runBtn.Size().Height), t.runBtn)
+}
+
+// scriptsChanged refreshes script suggestions and re-validates the draft
+// (a script may have been added or removed). UI goroutine.
+func (t *profilesTab) scriptsChanged() {
+	t.buildPicks()
+	if t.selected >= 0 {
+		keep := t.activeSlot
+		t.loadInspector()
+		if _, ok := t.entries[keep]; ok {
+			t.activeSlot = keep
+		}
+		if err := profile.Validate(t.draft); err != nil {
+			t.showError(err.Error())
+		} else {
+			t.hideMessage()
+		}
+	}
+}
 
 func (t *profilesTab) quickPick(a string) {
 	if e := t.entry(); e != nil {

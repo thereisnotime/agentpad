@@ -198,6 +198,17 @@ func (s *settingsUI) showPlan(b *settings.Bundle, plan *settings.Plan) {
 		from += ". "
 	}
 	body := container.NewVBox(wrapLabel(from+head), boldLabel(planSummary(plan)))
+	ticked := map[string]bool{}
+	if rows := consentRows(plan); len(rows) > 0 {
+		body.Add(text("Runs commands", 14, colorError, true))
+		body.Add(secondary("These make agentpad run commands from the bundle on this machine. " +
+			"Read each one and tick only what you trust; unticked items are skipped, the rest is imported."))
+		for _, cr := range rows {
+			key := consentKey(cr.Change)
+			check := widget.NewCheck("", func(on bool) { ticked[key] = on })
+			body.Add(container.NewBorder(nil, nil, vcenter(check), nil, previewLine(cr.Row)))
+		}
+	}
 	for _, g := range planPreview(plan) {
 		body.Add(text(g.Title, 13, colText2, true))
 		for _, r := range g.Rows {
@@ -211,7 +222,7 @@ func (s *settingsUI) showPlan(b *settings.Bundle, plan *settings.Plan) {
 	cancel := widget.NewButton("Cancel", d.Hide)
 	var buttons []fyne.CanvasObject
 	if plan.Mode == settings.Merge {
-		merge := widget.NewButtonWithIcon("Merge", theme.ConfirmIcon(), func() { d.Hide(); s.apply(plan) })
+		merge := widget.NewButtonWithIcon("Merge", theme.ConfirmIcon(), func() { d.Hide(); s.apply(consentPlan(plan, ticked)) })
 		merge.Importance = widget.HighImportance
 		if plan.Empty() {
 			merge.Disable()
@@ -233,7 +244,7 @@ func (s *settingsUI) showPlan(b *settings.Bundle, plan *settings.Plan) {
 				s.showPlan(b, mp)
 			}
 		})
-		replace := widget.NewButtonWithIcon("Replace", theme.WarningIcon(), func() { d.Hide(); s.apply(plan) })
+		replace := widget.NewButtonWithIcon("Replace", theme.WarningIcon(), func() { d.Hide(); s.apply(consentPlan(plan, ticked)) })
 		replace.Importance = widget.DangerImportance
 		if plan.Empty() {
 			replace.Disable()
