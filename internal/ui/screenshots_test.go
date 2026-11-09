@@ -13,6 +13,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"image/png"
 	"os"
@@ -30,6 +31,8 @@ import (
 	"github.com/thereisnotime/agentpad/internal/jump"
 	"github.com/thereisnotime/agentpad/internal/pad"
 	"github.com/thereisnotime/agentpad/internal/profile"
+	"github.com/thereisnotime/agentpad/internal/scripts"
+	"github.com/thereisnotime/agentpad/internal/settings"
 )
 
 type noJumper struct{}
@@ -58,27 +61,7 @@ func TestScreenshots(t *testing.T) {
 	}
 
 	shot := func(name string, screen int, w, h float32, prep func()) {
-		u.navigate(screen)
-		if prep != nil {
-			prep()
-		}
-		c := u.win.Canvas().(software.WindowlessCanvas)
-		c.SetScale(2)
-		u.win.Resize(fyne.NewSize(w, h))
-		// let size-dependent layouts settle
-		for range 3 {
-			u.win.Content().Refresh()
-			u.win.Resize(fyne.NewSize(w, h))
-			c.Capture()
-		}
-		f, err := os.Create(filepath.Join(dir, name+".png"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		enc := png.Encoder{CompressionLevel: png.BestCompression}
-		if err := errors.Join(enc.Encode(f, c.Capture()), f.Close()); err != nil {
-			t.Fatal(err)
-		}
+		capture(t, u, dir, name, screen, w, h, prep)
 	}
 
 	live := func() {
@@ -136,6 +119,101 @@ func TestScreenshots(t *testing.T) {
 	}
 	for v, n := range map[iconVariant]string{iconVariantIdle: "idle", iconVariantBusy: "busy", iconVariantAttention: "attention", iconVariantApp: "app"} {
 		_ = os.WriteFile(filepath.Join(tmpOr(dir), "icon-"+n+".svg"), padIconSVG(v), 0o644)
+	}
+}
+
+// TestScriptsScreenshot renders the Scripts screen with a few scripts,
+// hooks and past runs (read from a sample scripts.jsonl; nothing runs).
+func TestScriptsScreenshot(t *testing.T) {
+	dir := os.Getenv("SHOT_DIR")
+	if dir == "" {
+		t.Skip("SHOT_DIR not set")
+	}
+	tmp := t.TempDir()
+	st, err := settings.Open(filepath.Join(tmp, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Update(func(s *settings.Settings) {
+		s.Scripts = map[string]scripts.Script{
+			"mic-toggle": {Run: []string{"pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"}},
+			"ping-phone": {Shell: `curl -s -d "$AGENTPAD_TOOL" https://ntfy.sh/$TOPIC`, Env: map[string]string{"TOPIC": "x"}, Timeout: 10 * time.Second},
+			"pull-here":  {Shell: `cd "$AGENTPAD_CWD" && git pull --ff-only`, Timeout: time.Minute},
+		}
+		s.Hooks = []scripts.Hook{
+			{On: scripts.EventAttention, Agent: "claude", Script: "ping-phone"},
+			{On: scripts.EventIdle, Agent: "codex", Script: "pull-here"},
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	var log []byte
+	for _, r := range []scripts.Run{
+		{Script: "pull-here", Trigger: "hook idle", Start: now.Add(-14 * time.Minute), Duration: 1800 * time.Millisecond, Status: scripts.StatusOK, Stdout: "Already up to date.\n"},
+		{Script: "ping-phone", Trigger: "hook attention", Start: now.Add(-9 * time.Minute), Duration: 420 * time.Millisecond, Status: scripts.StatusOK},
+		{Script: "pull-here", Trigger: "key 3 · hold", Start: now.Add(-6 * time.Minute), Duration: 30 * time.Millisecond, Status: scripts.StatusFailed, ExitCode: 2, Stderr: "sh: line 1: cd: : No such file or directory\n"},
+		{Script: "ping-phone", Trigger: "Run now", Start: now.Add(-3 * time.Minute), Duration: 10 * time.Second, Status: scripts.StatusTimeout, Err: "killed after 10s"},
+		{Script: "mic-toggle", Trigger: "knob press", Start: now.Add(-40 * time.Second), Duration: 12 * time.Millisecond, Status: scripts.StatusOK},
+	} {
+		b, _ := json.Marshal(r)
+		log = append(append(log, b...), '\n')
+	}
+	logPath := filepath.Join(tmp, "state", "scripts.jsonl")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, log, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := test.NewTempApp(t)
+	u := newAppUI(a, Deps{
+		Writer:     &pad.ToolWriter{Path: filepath.Join(tmp, "no-such-tool")},
+		Settings:   NewFileSettings(st, nil),
+		Version:    "v0.3.0",
+		LogPath:    filepath.Join(tmp, "state", "events.jsonl"),
+		ScriptsLog: logPath,
+		Addr:       "127.0.0.1:47321",
+		Input:      silentInput{make(chan PadInputEvent)},
+		Live:       LiveDevices{Disabled: true},
+		Jumper:     noJumper{},
+		Notifier: func(func(string)) (NotifyBackend, error) {
+			return nil, errors.New("no notifications in screenshots")
+		},
+	})
+	u.ledFollow.Store(false)
+	t.Cleanup(u.shutdown)
+	u.win.SetPadded(false)
+	u.showDevice(pad.Device{VendorID: 0x1189, ProductID: 0x8890, BusPath: "1-4", Product: "CH57x pad"}, nil)
+	u.pillRecv.set(colorSuccess, "Receiver live")
+	u.scripts.refresh()
+	u.scripts.open[u.runner.Runs()[2].ID] = true // the failed run, expanded
+	u.scripts.refresh()
+	capture(t, u, dir, "scripts-wide", screenScripts, 1200, 1100, nil)
+}
+
+// capture renders screen of u at w x h (2x) into dir/name.png.
+func capture(t *testing.T, u *appUI, dir, name string, screen int, w, h float32, prep func()) {
+	t.Helper()
+	u.navigate(screen)
+	if prep != nil {
+		prep()
+	}
+	c := u.win.Canvas().(software.WindowlessCanvas)
+	c.SetScale(2)
+	u.win.Resize(fyne.NewSize(w, h))
+	for range 3 { // let size-dependent layouts settle
+		u.win.Content().Refresh()
+		u.win.Resize(fyne.NewSize(w, h))
+		c.Capture()
+	}
+	f, err := os.Create(filepath.Join(dir, name+".png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := png.Encoder{CompressionLevel: png.BestCompression}
+	if err := errors.Join(enc.Encode(f, c.Capture()), f.Close()); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -43,7 +43,7 @@ func newScriptsTab(u *appUI) *scriptsTab {
 	t.newBtn = widget.NewButtonWithIcon("New script", theme.ContentAddIcon(), func() { t.edit("", scripts.Script{}) })
 	t.newBtn.Importance = widget.HighImportance
 	scriptsCard := surface(container.NewBorder(
-		container.NewBorder(nil, nil, nil, t.newBtn, tight(boldLabel("Scripts"), secondary("Edit, run now, or put run:NAME on a pad control."))),
+		container.NewBorder(nil, nil, nil, container.NewVBox(t.newBtn), tight(boldLabel("Scripts"), secondary("Edit, run now, or put run:NAME on a pad control."))),
 		nil, nil, nil, inset(8, 0, 0, 0, t.list)))
 
 	labels := make([]string, 0, len(scripts.Events()))
@@ -153,7 +153,7 @@ func (t *scriptsTab) scriptCard(name string, s scripts.Script) fyne.CanvasObject
 	if state == dotRunning {
 		status = "running"
 	}
-	title := container.NewHBox(statusDot(state), boldLabel(name), vcenter(text(status, 12, colText3, false)))
+	title := container.NewHBox(statusDot(state), vcenter(text(name, 14, colText, true)), vcenter(text(status, 12, colText3, false)))
 	cmd := monoText(s.Preview(), 13, colText2)
 	var details []string
 	if s.Shell != "" {
@@ -172,7 +172,7 @@ func (t *scriptsTab) scriptCard(name string, s scripts.Script) fyne.CanvasObject
 	if t.u.files == nil {
 		edit.Disable()
 	}
-	info := tight(title, inset(0, 0, 18, 0, cmd), inset(0, 0, 18, 0, secondary(strings.Join(details, " · "))))
+	info := container.NewVBox(title, inset(0, 0, 18, 0, cmd), inset(0, 0, 18, 0, text(strings.Join(details, " · "), 12, colText3, false)))
 	bg := roundRect(colSurface2, 10)
 	return container.NewStack(bg, inset(6, 6, 10, 10, container.NewBorder(nil, nil, nil, vcenter(container.NewHBox(edit, run)), info)))
 }
