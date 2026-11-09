@@ -133,6 +133,10 @@ itself (gesture mode only; the pad firmware can't send them in plain mode):
 
 Any other `agentpad:` name is rejected when the profile is saved.
 
+`run:<name>` runs one of your [scripts](scripts.md) instead of typing, in any
+slot. Unlike `agentpad:` actions it works in plain mode too (the control is
+programmed to F19–F24 and agentpad watches for it).
+
 ## Using it
 
 - **Switch modes** on the Pad screen (Plain / Gesture) or in the tray menu

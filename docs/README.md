@@ -7,6 +7,7 @@
 | [Profiles](profiles.md) | Built-in profiles, the action grammar, layers, where profiles are stored |
 | [Configuration](configuration.md) | `settings.yaml` reference, folder layout, dotfiles, export/import bundles, sharing profiles |
 | [Gestures](gestures.md) | Tap / hold / double-tap / press+rotate / chords |
+| [Scripts and hooks](scripts.md) | Run your own commands from the pad or on agent events, recipes, security |
 | [Attention jump](attention-jump.md) | Jump to the Konsole tab / zellij pane of the waiting agent |
 | [Architecture](architecture.md) | Components, event model, receiver API, data files |
 | [Development](development.md) | Building (X11 / Wayland), just recipes, tests, specs, CI |

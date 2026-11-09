@@ -39,6 +39,7 @@ Actions use the [`ch57x-keyboard-tool`](https://github.com/kriomant/ch57x-keyboa
 | Media | `play`, `next`, `prev`, `mute`, `volumeup`, `volumedown` | no modifiers, not in sequences |
 | Mouse | `click`, `rclick`, `wheelup`, `wheeldown`, `ctrl-click` | not in sequences |
 | Raw code | `<104>` | HID usage 0–255 |
+| Script | `run:mic-toggle` | runs one of your [scripts](scripts.md); plain mode programs F19–F24 for it |
 
 The editor offers all supported names as suggestions.
 

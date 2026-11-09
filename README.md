@@ -47,6 +47,7 @@ One Go binary with a native Fyne UI. No browser, no Electron, no Node.
 | 🌈 **LED control** | Effects per model, colours on boards that support them. |
 | 📋 **Live sessions & log** | Every agent session with state, directory and last tool, plus a JSONL event log. |
 | 🖥️ **Tray** | Idle / busy / needs-attention at a glance. |
+| ⚡ **Scripts & hooks** | Run your own commands from a pad key or when an agent needs you: mute the mic, ping your phone, switch layouts. |
 | 🔒 **Local & safe** | Loopback-only receiver; hooks time out in 300&nbsp;ms and never block an agent. |
 
 **Coming next:** per-app profiles on X11 and KDE Wayland.
@@ -120,6 +121,7 @@ Build requirements (Go 1.27, just, Fyne's C headers) are in [Development](docs/d
 | [Agent integration](docs/agents.md) | Claude Code, Codex CLI, OpenCode hooks and what each event means |
 | [Profiles](docs/profiles.md) | Built-in profiles, action syntax, layers, storage |
 | [Gestures](docs/gestures.md) | Hold, double-tap, press+rotate, chords |
+| [Scripts and hooks](docs/scripts.md) | Your own commands from the pad or on agent events, with recipes |
 | [Attention jump](docs/attention-jump.md) | Jump to the waiting agent's tab / pane |
 | [Architecture](docs/architecture.md) | Components, event model, receiver API, files |
 | [Development](docs/development.md) | X11 / Wayland builds, just recipes, tests, specs, CI |

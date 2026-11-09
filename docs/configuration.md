@@ -120,6 +120,24 @@ ui:
 | `gestures.chord_window_ms` | 10–500 | 80 |
 | `notifications.attention` | `true`, `false` | `true` |
 | `ui.theme` | `system`, `dark`, `light` | `system` |
+| `scripts.<name>` | `{run: [cmd, args…]}` or `{shell: "…"}`, plus optional `cwd`, `env`, `timeout` ([Scripts](scripts.md)) | none |
+| `hooks` | list of `{on: EVENT, agent: claude \| codex \| opencode, script: NAME}` ([Scripts](scripts.md#hooks)) | none |
+
+### Scripts and hooks
+
+`scripts:` and `hooks:` are optional and not in the first-run file. They follow the same rules (validated with line
+numbers, comments kept when the Scripts screen edits them). A hook must name a script that exists, and a profile
+action `run:<name>` must too. The full reference and recipes are in [Scripts and event hooks](scripts.md).
+
+```yaml
+scripts:
+  mic-toggle:
+    run: [pactl, set-source-mute, "@DEFAULT_SOURCE@", toggle]
+hooks:
+  - on: attention
+    agent: claude
+    script: mic-toggle
+```
 
 LED policies are kept per board family because the two families describe their LEDs differently; the one matching
 the connected pad is used. Each family is validated against what that board can do (see [Hardware](hardware.md)).
