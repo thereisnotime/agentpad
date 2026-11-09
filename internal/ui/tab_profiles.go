@@ -59,6 +59,7 @@ type profilesTab struct {
 	warning     *widget.Label
 	mismatch    string // last "pad holds a different mapping" notice, cleared on apply
 	monitor     *fyne.Container
+	monEmpty    *widget.Label // "Use the pad…" while nothing was recognised
 	monitorBox  fyne.CanvasObject
 	monLog      gestureLog
 
@@ -103,8 +104,10 @@ func newProfilesTab(u *appUI) *profilesTab {
 	t.warning.Importance = widget.WarningImportance
 	t.warning.Hide()
 	t.monitor = container.NewVBox()
-	monScroll := container.NewVScroll(t.monitor)
-	monScroll.SetMinSize(fyne.NewSize(0, monitorLines*18))
+	t.monEmpty = secondary("Use the pad, recognised gestures show here")
+	// sized to its lines, up to monitorLines, then it scrolls
+	lineH := monoText("Mg", 12, colText).MinSize().Height + theme.Padding()
+	monScroll := cappedScroll(container.NewVBox(t.monEmpty, t.monitor), func() float32 { return monitorLines * lineH })
 	t.monitorBox = surface(container.NewVBox(boldLabel("Recognised"), monScroll))
 	t.monitorBox.Hide()
 	t.layerLb = secondary("")
@@ -472,6 +475,11 @@ func (t *profilesTab) monitorAdd(it monitorItem) {
 // refreshMonitor redraws the monitor lines, fading older ones. UI goroutine.
 func (t *profilesTab) refreshMonitor(now time.Time) {
 	items := t.monLog.items
+	if len(items) == 0 {
+		t.monEmpty.Show()
+	} else {
+		t.monEmpty.Hide()
+	}
 	for len(t.monitor.Objects) < len(items) {
 		t.monitor.Add(monoText("", 12, colText))
 	}

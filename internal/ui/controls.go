@@ -121,7 +121,7 @@ const notUsed = "not used"
 // slotsFor lists the editable actions of c. Plain mode has one slot; gesture
 // mode adds one per gesture kind of c and the three chords. Empty gesture
 // slots mean "not used", except tap and turn, which fall back to the plain
-// action (shown as the placeholder).
+// action: it is the placeholder, and the label says "· plain".
 func slotsFor(c controlID, p profile.Profile, gestures bool) []actionSlot {
 	out := []actionSlot{{ID: slotAction, Label: "Sends", Placeholder: "key, combo (ctrl-c) or media key"}}
 	if !gestures {
@@ -132,7 +132,8 @@ func slotsFor(c controlID, p profile.Profile, gestures bool) []actionSlot {
 	for i, kind := range profile.GestureKinds(c.name()) {
 		s := actionSlot{ID: gestureSlotID(c.name(), kind), Label: kindLabel(kind), Placeholder: notUsed}
 		if (kind == profile.KindTap || kind == profile.KindRotate) && plain != "" {
-			s.Placeholder = plain + " (plain)"
+			s.Label += " · plain"
+			s.Placeholder = plain
 		}
 		if i == 0 {
 			s.Section = sectionGestures
